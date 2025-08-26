@@ -1,0 +1,10 @@
+torch 
+torchaudio 
+transformers 
+librosa 
+dtw-python 
+phonemizer 
+numpy
+fastapi
+python-multipart
+coqui-tts
