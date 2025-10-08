@@ -65,7 +65,7 @@ You also get prosody information, with:
 + `prosody.f0`: the fundamental frequency (pitch) contour
 + `prosody.energy`: the energy (loudness) contour
 
-## Visemes 
+## Visemes 
 
 This application comes with a basic [phoneme to viseme](static/viseme.js) javascript implementation, for English language. An better implementation could be done using [dedicated models](https://github.com/Magicboomliu/Viseme-Classification).
 
