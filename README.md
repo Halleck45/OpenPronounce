@@ -75,15 +75,15 @@ import { Viseme } from "/static/viseme.js";
 const mouthImage = document.getElementById('the-img-node-you-want-to-use');
 const viseme = new Viseme(mouthImage);
 
-// pass the phonemes you want
+// Play the phonemes
 viseme.play(['həloʊ', 'huː', 'ɑːɹ', 'juː']);
-    
+``` 
 
 ## Web application
 
 Mount the server:
 
-```
+```bash
 python -m uvicorn server:app --host 0.0.0.0 --port 8000 --reload
 ```
 
