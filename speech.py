@@ -49,13 +49,24 @@ def extract_embeddings(audio_waveform, sampling_rate=16000):
 def get_phonemes_with_word_mapping(text):
     """ Return a list of phonemes and their associated words """
     words = text.split()  # List of words
-    phonemes = phonemize(text, language="en-us", backend="espeak", strip=True, preserve_punctuation=False).split()
+    
+    # Use the same fallback logic as get_phonemes
+    try:
+        phonemes = phonemize(text, language="en-us", backend="espeak", strip=True, preserve_punctuation=False).split()
+    except Exception as e:
+        print(f"⚠️ Error with espeak in get_phonemes_with_word_mapping, switching to festival: {e}")
+        phonemes = phonemize(text, language="en-us", backend="festival", strip=True, preserve_punctuation=False).split()
 
     # Associate each phoneme with a word (naively based on split)
     phoneme_to_word = {}
     phoneme_index = 0
     for word in words:
-        word_phonemes = phonemize(word, language="en-us", backend="espeak", strip=True, preserve_punctuation=False).split()
+        try:
+            word_phonemes = phonemize(word, language="en-us", backend="espeak", strip=True, preserve_punctuation=False).split()
+        except Exception as e:
+            print(f"⚠️ Error with espeak for word '{word}', switching to festival: {e}")
+            word_phonemes = phonemize(word, language="en-us", backend="festival", strip=True, preserve_punctuation=False).split()
+        
         for phoneme in word_phonemes:
             phoneme_to_word[phoneme_index] = word
             phoneme_index += 1
@@ -72,7 +83,7 @@ def get_phonemes(text):
     if not text:
         return []
 
-    # First test with `espeak`, then fallback to `espeak-ng` if error
+    # First test with `espeak`, then fallback to `festival` if error
     try:
         phonemes = phonemize(
             text,
@@ -82,11 +93,11 @@ def get_phonemes(text):
             preserve_punctuation=False  # Disable punctuation that may cause issues
         )
     except Exception as e:
-        print(f"⚠️ Error with espeak, switching to espeak-ng: {e}")
+        print(f"⚠️ Error with espeak, switching to festival: {e}")
         phonemes = phonemize(
             text,
             language="en-us",
-            backend="espeak-ng",
+            backend="festival",
             strip=True,
             preserve_punctuation=False
         )
