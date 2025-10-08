@@ -17,13 +17,13 @@ python -m spacy download en_core_web_sm
 import audio
 import speech
 
-
 audio_path = "example.mp3"
 expected_text = "Hello I am a developer"
 
 sound = audio.load(audio_path)
-json = speech.compare_audio_with_text(sound, expected_text)
-print(json)
+prediction = speech.compare_audio_with_text(sound, expected_text)
+
+print(prediction.score)
 ```
 
 ### As CLI
@@ -67,7 +67,7 @@ You also get prosody information, with:
 
 ## Visemes 
 
-This application comes with a basic [phoneme to viseme](static/viseme.js) javascript implementation, for English language. An better implementation could be done using [dedicated models](https://github.com/Magicboomliu/Viseme-Classification).
+This application comes with a (very!) basic [phoneme to viseme](static/viseme.js) javascript implementation, for English language. An better implementation could be done using [dedicated models](https://github.com/Magicboomliu/Viseme-Classification).
 
 
 ```javascript
