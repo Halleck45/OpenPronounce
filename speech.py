@@ -11,6 +11,7 @@ import re
 import librosa
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
+import warnings
 
 
 # Load Wav2Vec2
@@ -54,7 +55,7 @@ def get_phonemes_with_word_mapping(text):
     try:
         phonemes = phonemize(text, language="en-us", backend="espeak", strip=True, preserve_punctuation=False).split()
     except Exception as e:
-        print(f"⚠️ Error with espeak in get_phonemes_with_word_mapping, switching to festival: {e}")
+        warnings.warn(f"Error with espeak in get_phonemes_with_word_mapping, switching to festival: {e}", UserWarning)
         phonemes = phonemize(text, language="en-us", backend="festival", strip=True, preserve_punctuation=False).split()
 
     # Associate each phoneme with a word (naively based on split)
@@ -64,7 +65,7 @@ def get_phonemes_with_word_mapping(text):
         try:
             word_phonemes = phonemize(word, language="en-us", backend="espeak", strip=True, preserve_punctuation=False).split()
         except Exception as e:
-            print(f"⚠️ Error with espeak for word '{word}', switching to festival: {e}")
+            warnings.warn(f"Error with espeak for word '{word}', switching to festival: {e}", UserWarning)
             word_phonemes = phonemize(word, language="en-us", backend="festival", strip=True, preserve_punctuation=False).split()
         
         for phoneme in word_phonemes:
@@ -93,7 +94,7 @@ def get_phonemes(text):
             preserve_punctuation=False  # Disable punctuation that may cause issues
         )
     except Exception as e:
-        print(f"⚠️ Error with espeak, switching to festival: {e}")
+        warnings.warn(f"Error with espeak, switching to festival: {e}", UserWarning)
         phonemes = phonemize(
             text,
             language="en-us",
