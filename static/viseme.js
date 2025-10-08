@@ -40,25 +40,26 @@ class Viseme {
     }
 
     /**
-     * Fonction pour diviser les phonèmes complexes en phonèmes simples.
+     * Divide a phoneme group into individual phonemes, handling diphthongs.
+     * @param {string} phonemeGroup - The phoneme group to split.
+     * @returns {string[]} - An array of individual phonemes.
      */
     splitPhonemes(phonemeGroup) {
-        // Vérifier si le phonème complet est une diphtongue
+        // Check if the complete phoneme is a diphthong
         if (this.diphthongMap[phonemeGroup]) {
-            console.log(`Décomposition de ${phonemeGroup} via diphthongMap:`, this.diphthongMap[phonemeGroup]);
+            console.log(`Decomposing ${phonemeGroup} via diphthongMap:`, this.diphthongMap[phonemeGroup]);
             return this.diphthongMap[phonemeGroup];
         }
-    
-        // Vérifier si le phonème contient une diphtongue connue et la diviser manuellement
+
+        // Check if the phoneme contains a known diphthong and split it manually
         for (const diphthong in this.diphthongMap) {
             if (phonemeGroup.includes(diphthong)) {
                 let splitResult = phonemeGroup.replace(diphthong, this.diphthongMap[diphthong].join(" ")).split(" ");
-                console.log(`Décomposition manuelle de ${phonemeGroup}:`, splitResult);
+                console.log(`Manually decomposing ${phonemeGroup}:`, splitResult);
                 return splitResult;
             }
         }
     
-        // Nouvelle regex pour extraire chaque phonème simple
         const phonemeRegex = /[a-zʃʒɹðθŋɑɪɔəʊʊː]+/g;
         const matchedPhonemes = phonemeGroup.match(phonemeRegex);
         
@@ -66,22 +67,24 @@ class Viseme {
             let splitPhonemes = [];
             for (let phoneme of matchedPhonemes) {
                 if (this.diphthongMap[phoneme]) {
-                    splitPhonemes.push(...this.diphthongMap[phoneme]); // Si c'est une diphtongue connue
+                    splitPhonemes.push(...this.diphthongMap[phoneme]); // If it's a known diphthong
                 } else {
                     splitPhonemes.push(phoneme);
                 }
             }
-            console.log(`Décomposition améliorée de ${phonemeGroup}:`, splitPhonemes);
+            console.log(`Improved decomposition of ${phonemeGroup}:`, splitPhonemes);
             return splitPhonemes;
         }
-    
-        console.log(`Aucune décomposition trouvée pour ${phonemeGroup}, retour inchangé`);
-        return [phonemeGroup]; // Si aucun découpage possible, on retourne tel quel
+
+        console.log(`No decomposition found for ${phonemeGroup}, returning unchanged`);
+        return [phonemeGroup]; // If no splitting is possible, return as is
     }
     
 
     /**
-     * Fonction d'animation des visèmes
+     * Animate visemes based on phoneme groups.
+     * @param {string[]} phonemeGroups - Array of phoneme groups to animate.
+     * @param {number} duration - Total duration for the animation in milliseconds.
      */
     async play(phonemeGroups, duration = 300) {
         const mouthImage = this.mouthImage;
@@ -97,12 +100,12 @@ class Viseme {
                 console.log(viseme)
                 mouthImage.src = `${imagesFolder}/${viseme}`;
     
-                // Attendre avant de passer au phonème suivant
+                // Wait for a short duration to simulate the viseme display time
                 await new Promise(resolve => setTimeout(() => requestAnimationFrame(resolve), Math.max(150, duration / phonemes.length)));
             }
         }
     
-        // Remettre l’image de repos à la fin
+        // Reset to rest position after animation
         mouthImage.src = `${imagesFolder}/rest.png`;
     }
     
@@ -125,7 +128,7 @@ class Viseme {
             "ə": 100, "a": 150, "o": 150,
             "i": 140, "e": 140, "ɪ": 130,
             "u": 160, "ʊ": 130,
-            // Diphtongues et voyelles longues
+            // Diphthongs and long vowels
             "juː": 300, "ɑː": 250, "eɪ": 250,
             "oʊ": 250, "aɪ": 280, "aʊ": 300,
             "ɔɪ": 280, "ɪə": 250, "ʊə": 250,
@@ -135,13 +138,13 @@ class Viseme {
         let totalDuration = 0;
     
         phonemes.forEach(phoneme => {
-            // Vérifier si le phonème est une diphtongue et le décomposer
+            // Check if the phoneme is a diphthong and decompose it
             if (this.diphthongMap[phoneme]) {
                 this.diphthongMap[phoneme].forEach(subPhoneme => {
-                    totalDuration += phonemeDurations[subPhoneme] || 200; // Valeur par défaut
+                    totalDuration += phonemeDurations[subPhoneme] || 200; // Default value
                 });
             } else {
-                totalDuration += phonemeDurations[phoneme] || 200; // Valeur par défaut
+                totalDuration += phonemeDurations[phoneme] || 200; // Default value
             }
         });
     

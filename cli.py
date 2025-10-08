@@ -4,7 +4,7 @@ import speech
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
-        print("❌ Utilisation : python main.py <file.wav> <text>")
+        print("❌ Usage : python cli.py <file.wav> <text>")
         sys.exit(1)
 
     audio_path = sys.argv[1]
