@@ -65,6 +65,19 @@ You also get prosody information, with:
 + `prosody.f0`: the fundamental frequency (pitch) contour
 + `prosody.energy`: the energy (loudness) contour
 
+## Visemes 
+
+This application comes with a basic [phoneme to viseme](static/viseme.js) javascript implementation, for English language. An better implementation could be done using [dedicated models](https://github.com/Magicboomliu/Viseme-Classification).
+
+
+```javascript
+import { Viseme } from "/static/viseme.js";
+const mouthImage = document.getElementById('the-img-node-you-want-to-use');
+const viseme = new Viseme(mouthImage);
+
+// pass the phonemes you want
+viseme.play(['həloʊ', 'huː', 'ɑːɹ', 'juː']);
+    
 
 ## Web application
 
@@ -76,8 +89,7 @@ python -m uvicorn server:app --host 0.0.0.0 --port 8000 --reload
 
 ![Web application screenshot](./docs/open-pronounce-preview.png)
 
-This application comes with a basic [phoneme to viseme](static/viseme.js) javascript implementation, for English language. An better implementation could be done using [dedicated models](https://github.com/Magicboomliu/Viseme-Classification).
-
+> Note: recording using your micro is not possible in Chrome with a no-https local environment.
 
 # References
 
