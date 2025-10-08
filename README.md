@@ -3,6 +3,9 @@ This project provides tools for analyzing and improving English pronunciation us
 See my [blog post](https://blog.lepine.pro/en/ai-wav2vec-pronunciation-vectorization/) for more details about the approach.
 
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Halleck45/OpenPronounce/blob/main/OpenPronounce-demo.ipynb)
+[![Tests](https://github.com/Halleck45/OpenPronounce/actions/workflows/tests.yml/badge.svg)](https://github.com/Halleck45/OpenPronounce/actions/workflows/tests.yml)
+[![Sponsor](https://img.shields.io/static/v1?label=Sponsor&amp;message=%E2%9D%A4&amp;logo=GitHub&amp;color=%23fe8e86)](https://github.com/sponsors/Halleck45)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 
 ## Demo notebook

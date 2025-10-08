@@ -350,3 +350,4 @@ class TestEdgeCases(unittest.TestCase):
         self.assertIsInstance(aligned_seq2, np.ndarray)
         self.assertEqual(len(aligned_seq1), 0)
         self.assertEqual(len(aligned_seq2), 0)
+    

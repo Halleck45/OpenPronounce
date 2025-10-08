@@ -8,3 +8,9 @@ numpy
 fastapi
 python-multipart
 coqui-tts
+pydub
+gtts
+fastdtw
+scipy
+python-Levenshtein
+scikit-learn
