@@ -69,6 +69,9 @@ def get_phonemes(text):
     # Clean the text to avoid errors
     text = text.strip().lower()
 
+    if not text:
+        return []
+
     # First test with `espeak`, then fallback to `espeak-ng` if error
     try:
         phonemes = phonemize(
@@ -98,6 +101,9 @@ def get_phoneme_embeddings(phoneme_seq):
 
 def compare_pronunciation(expected, actual):
     """ Compare pronunciation with DTW and return a score """
+    if not expected or not actual:
+        return 0
+
     expected_seq = get_phoneme_embeddings(expected)
     actual_seq = get_phoneme_embeddings(actual)
 
@@ -202,6 +208,13 @@ def compute_pronunciation_score(distance_dtw, phoneme_distance, word_distance, m
     
     # Ponderate the different components: DTW 40%, Phonemes 30%, Words 30%
     final_score = 0.4 * dtw_score + 0.3 * phoneme_score + 0.3 * word_score
+
+    # edge cases
+    if final_score < 0:
+        final_score = 0
+
+    if final_score > 100:
+        final_score = 100
     
     return round(final_score, 2)
 
@@ -285,4 +298,4 @@ def clean_transcription(text):
     text = text.lower().strip()
     text = re.sub(r"[^a-zA-Z' ]+", "", text)  # Remove special characters
     text = text.replace("  ", " ")  # Avoid multiple spaces
-    return text
+    return text.strip()

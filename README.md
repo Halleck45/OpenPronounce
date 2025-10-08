@@ -106,16 +106,25 @@ python -m uvicorn server:app --host 0.0.0.0 --port 8000 --reload
 
 > Note: recording using your micro is not possible in Chrome with a no-https local environment.
 
-# References
+## Contributing
+
+Please keep pytests up-to-date:
+
+```bash
+pytest -v
+```
+
+## References
 
 - [Vectorisation of sounds for pronunciation](https://blog.lepine.pro/en/ai-wav2vec-pronunciation-vectorization/)
+- [Wav2Vec2](https://ai.meta.com/research/impact/wav2vec/)
 - [Visemes](https://learn.microsoft.com/fr-fr/azure/ai-services/speech-service/how-to-speech-synthesis-viseme?tabs=visemeid&pivots=programming-language-csharp), 
 - [Visemes SSML](https://learn.microsoft.com/fr-fr/azure/ai-services/speech-service/speech-ssml-phonetic-sets)
 
-# Visemes
+## Visemes
 
 The viseme images come from the HumanBeanCMU39 viseme set.
 
-# License
+## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details
