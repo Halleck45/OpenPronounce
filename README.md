@@ -24,6 +24,7 @@ expected_text = "Hello I am a developer"
 sound = audio.load(audio_path)
 json = speech.compare_audio_with_text(sound, expected_text)
 print(json)
+```
 
 ### As CLI
 
