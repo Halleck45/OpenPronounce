@@ -2,6 +2,21 @@ This project provides tools for analyzing and improving English pronunciation us
 
 See my [blog post](https://blog.lepine.pro/en/ai-wav2vec-pronunciation-vectorization/) for more details about the approach.
 
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Halleck45/OpenPronounce/blob/main/OpenPronounce-demo.ipynb)
+
+
+## Demo notebook
+
+You can explore the project and test the pronunciation analysis directly in the provided Jupyter notebook:
+
+➡️ [Open in Jupyter Notebook](./OpenPronounce-demo.ipynb)
+
+This notebook walks through:
+- loading an audio sample,
+- transcribing speech with Wav2Vec2,
+- comparing predicted and expected phonemes,
+- visualizing pronunciation and prosody scores.
+
 ## Installation
 
 ```bash
