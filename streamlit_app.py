@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import threading
 import time
 import uvicorn
@@ -145,17 +146,11 @@ if st.session_state.server_started and not st.session_state.server_ready:
     if check_server_running(server_url):
         st.session_state.server_ready = True
 
-# Afficher la page HTML dans un iframe
+# Afficher la page HTML dans un iframe avec st.components.v1.iframe (comme dans le billet de blog)
 if st.session_state.server_ready:
     server_url = f"http://127.0.0.1:{st.session_state.server_port}"
     
-    st.markdown(f"""
-    <div style="width: 100%; height: 1200px; border: none;">
-        <iframe src="{server_url}" width="100%" height="1200px" frameborder="0" 
-                allow="microphone; camera; autoplay; encrypted-media"
-                style="border-radius: 10px; border: 2px solid #e5e7eb;"></iframe>
-    </div>
-    """, unsafe_allow_html=True)
+    components.iframe(server_url, height=1200, scrolling=True)
 else:
     st.info("⏳ Démarrage du serveur en cours... Veuillez patienter quelques secondes.")
     st.rerun()
