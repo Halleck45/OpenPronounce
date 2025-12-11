@@ -18,3 +18,4 @@ streamlit
 plotly
 requests
 uvicorn
+soundfile
