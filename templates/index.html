@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="fr">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,19 +10,35 @@
     <title>English Pronunciation Experiment</title>
     <style>
         @keyframes pulse {
-            0% { box-shadow: 0 0 0 0 rgba(128, 90, 213, 0.7); }
-            100% { box-shadow: 0 0 0 20px rgba(128, 90, 213, 0); }
+            0% {
+                box-shadow: 0 0 0 0 rgba(128, 90, 213, 0.7);
+            }
+
+            100% {
+                box-shadow: 0 0 0 20px rgba(128, 90, 213, 0);
+            }
         }
+
         @keyframes recording {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.1); }
-            100% { transform: scale(1); }
+            0% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.1);
+            }
+
+            100% {
+                transform: scale(1);
+            }
         }
+
         .hidden-section {
             opacity: 0;
             transform: translateY(20px);
             transition: opacity 0.5s ease, transform 0.5s ease;
         }
+
         .visible-section {
             opacity: 1;
             transform: translateY(0);
@@ -38,228 +55,453 @@
             align-items: center;
             justify-content: center;
         }
+
         #mouth-image {
             width: 150px;
             height: 150px;
         }
 
-        @keyframes spin-slow { to { transform: rotate(360deg) } }
-        .animate-spin-slow { animation: spin-slow 2.5s linear infinite }
+        @keyframes spin-slow {
+            to {
+                transform: rotate(360deg)
+            }
+        }
+
+        .animate-spin-slow {
+            animation: spin-slow 2.5s linear infinite
+        }
     </style>
 </head>
-<body class="flex flex-col items-center justify-center min-h-screen bg-gray-100">
 
+<body class="bg-gray-50 min-h-screen py-8">
 
+    <!-- Dev Tools (hidden in production) -->
     <div class="fixed bottom-0 right-0 text-white grid grid-cols-1 gap-2 p-4 opacity-25">
-        <div class="text-black p-2 rounded-lg">
-            Dev. Tools
-        </div>
+        <div class="text-black p-2 rounded-lg">Dev. Tools</div>
         <button id="dev-failed" class="rounded bg-black py-1 px-2 hover:bg-gray-800">failed</button>
         <button id="dev-success" class="rounded bg-black py-1 px-2 hover:bg-gray-800">success</button>
         <button id="dev-loading" class="rounded bg-black py-1 px-2 hover:bg-gray-800">loading</button>
         <button id="dev-500" class="rounded bg-black py-1 px-2 hover:bg-gray-800">500</button>
     </div>
 
-
-    <div class="mt-8 mb-8  bg-white rounded-3xl bg-white/70 backdrop-blur shadow-xl ring-1 ring-slate-200 md:w-1/3 p-8">
-
-        <div class="overflow-hidden relative">
-
-            <div id="btn-retry" class="absolute hidden bottom-8 md:bottom-16 text-center w-full z-10">
-                <button class="text-center text-xl mx-auto px-4 py-4 bg-white text-purple-500 rounded-lg shadow-md hover:bg-purple-100 transition" id="retry-btn">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="inline-block size-6 mr-2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
-                      </svg>
-                    Réessayer
-                </button>
+    <!-- Top Navigation Bar -->
+    <nav class="bg-gray-900 text-white shadow-lg mb-8">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex-shrink-0 flex items-center">
+                    <span class="font-bold text-xl tracking-tight">OpenPronounce</span>
+                </div>
+                <div class="flex items-center gap-6">
+                    <a href="https://blog.lepine.pro/en/ai-wav2vec-pronunciation-vectorization/" target="_blank"
+                        class="text-gray-300 hover:text-white flex items-center gap-2 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                            stroke="currentColor" class="w-6 h-6">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
+                        </svg>
+                        <span class="hidden sm:inline">Read the Article</span>
+                    </a>
+                    <a href="https://github.com/Halleck45/OpenPronounce" target="_blank"
+                        class="text-gray-300 hover:text-white flex items-center gap-2 transition-colors">
+                        <svg class="h-6 w-6" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path fill-rule="evenodd"
+                                d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"
+                                clip-rule="evenodd" />
+                        </svg>
+                        <span class="hidden sm:inline">View on GitHub</span>
+                    </a>
+                </div>
             </div>
-
         </div>
+    </nav>
 
-        <div class="px-6 ">
-
-            <!-- start:loading -->
-            <div id="loading" class="hidden text-center">
-                <div class="mb-2 text-xl font-semibold text-purple-700">
-                    Analyzing your speech...
-                </div>
-                <dotlottie-player src="https://lottie.host/9aa39c77-65e0-478e-8243-852870e49792/7GS38mSvBv.lottie" background="transparent" speed="1" style="margin: 0 auto; width: 300px; height: 300px" loop autoplay></dotlottie-player>
-            </div>
-            <!-- end:loading -->
+    <div class="max-w-4xl mx-auto px-4">
 
 
-            <!-- start:error -->
-            <div id="error" class="hidden  text-center">
-                <div class="mb-2">
-                    <p class=" text-lg font-semibold text-red-600">
-                        An error occurred.
-                    </p>
-                    <p class="mt-8">
-                        Our service might be temporarily unavailable, or your internet connection is unstable. Please try again.
-                    </p>
-                </div>
+        <!-- Header -->
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-gray-800 mb-2">Pronunciation Demo</h1>
+        </header>
 
-                <dotlottie-player src="https://lottie.host/19ecd853-f89f-4b22-b152-d3d141794994/hrHxh5UYNa.lottie" background="transparent" speed="1" style="margin: 0 auto; width: 300px; height: 300px" loop autoplay></dotlottie-player>
-            </div>
-            <!-- end:error -->
+        <!-- Main Container -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
 
+            <!-- Mode and Language Selection -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
 
-            <!-- Speaking -->
-            <div id="speaking" class="space-y-8">
-                <header class="text-center">
-                    <h2 class="text-xl font-semibold text-purple-700">
-                        Pronounce the following text
-                    </h2>
-                </header>
-
+                <!-- Mode -->
                 <div>
-              <textarea id="expected-text" rows="3"
-                        class="w-full rounded-2xl border border-slate-200 bg-white/70 p-4 text-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        placeholder="Saisis le texte à prononcer…">Hello, how are you?</textarea>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Mode</label>
+                    <div class="space-y-2">
+                        <label class="flex items-center">
+                            <input type="radio" name="mode" value="scripted" checked
+                                class="mr-2 text-red-600 focus:ring-red-500">
+                            <span>Scripted (Reading)</span>
+                        </label>
+                    </div>
                 </div>
 
-                <div id="speaking-learn" class="text-center">
-                    <p class="text-slate-500">
-                        Listen to the correct pronunciation
-                    </p>
+                <!-- Language -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Language</label>
+                    <select id="language-select"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 focus:outline-none focus:ring-2 focus:ring-red-500">
+                        <option value="en-US">English</option>
+                    </select>
+                </div>
+            </div>
 
-                    <div id="mouth-container" class="mt-3 flex flex-col items-center justify-center">
+            <hr class="my-6 border-gray-200">
+
+            <!-- Text Input -->
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Text to pronounce</label>
+                <textarea id="expected-text" rows="3"
+                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                    placeholder="Enter the text to pronounce...">Hello, how are you?</textarea>
+                <div class="mt-2 text-right">
+                    <button id="listen-btn"
+                        class="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                            stroke="currentColor" class="w-4 h-4">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
+                        </svg>
+                        Listen
+                    </button>
+                </div>
+            </div>
+
+            <!-- Recording Section -->
+            <div class="mb-6">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">Your Recording</h3>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                    <!-- Microphone -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Microphone</label>
+                        <div class="border-2 border-gray-200 rounded-lg p-6 text-center">
+                            <div class="flex items-center justify-center mb-4">
+                                <button id="record-btn"
+                                    class="w-16 h-16 rounded-full bg-red-600 text-white shadow-lg hover:bg-red-700 flex items-center justify-center transition">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                        stroke-width="1.5" stroke="currentColor" class="w-8 h-8">
+                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                            d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <!-- Waveform visualization -->
+                            <div class="flex items-center justify-center gap-1 h-12 mb-2">
+                                <div class="w-1 bg-gray-300 rounded-full h-4"></div>
+                                <div class="w-1 bg-gray-300 rounded-full h-8"></div>
+                                <div class="w-1 bg-gray-300 rounded-full h-6"></div>
+                                <div class="w-1 bg-gray-300 rounded-full h-10"></div>
+                                <div class="w-1 bg-gray-300 rounded-full h-5"></div>
+                                <div class="w-1 bg-gray-300 rounded-full h-12"></div>
+                                <div class="w-1 bg-gray-300 rounded-full h-7"></div>
+                                <div class="w-1 bg-gray-300 rounded-full h-9"></div>
+                            </div>
+                            <div id="recording-timer" class="text-sm text-gray-600">00:00</div>
+                        </div>
+                    </div>
+
+                    <!-- File Upload -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Or audio file</label>
+                        <div id="file-drop-zone"
+                            class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-red-400 transition cursor-pointer">
+                            <div class="mb-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                    stroke-width="1.5" stroke="currentColor" class="w-12 h-12 mx-auto text-gray-400">
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                        d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                                </svg>
+                            </div>
+                            <p class="text-gray-600 mb-2">Drag and drop file here</p>
+                            <p class="text-xs text-gray-500 mb-3">Limit 200MB per file • WAV, MP3, M4A, OGG</p>
+                            <button id="browse-files-btn"
+                                class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition">
+                                Browse files
+                            </button>
+                            <input type="file" id="file-input" accept="audio/*" class="hidden">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Audio Player (hidden by default) -->
+                <div class="mt-4 hidden" id="audio-player-container">
+                    <audio id="audio-player" controls class="w-full"></audio>
+                </div>
+            </div>
+
+            <!-- Viseme Checkbox -->
+            <div class="mb-6">
+                <label class="flex items-center">
+                    <input type="checkbox" id="viseme-checkbox" class="mr-2 text-red-600 focus:ring-red-500">
+                    <span class="text-sm font-medium text-gray-700">Show Visemes</span>
+                </label>
+            </div>
+
+            <!-- Viseme Section (hidden by default) -->
+            <div id="viseme-section" class="mb-6 hidden">
+                <div class="border-2 border-gray-200 rounded-lg p-6 text-center">
+                    <p class="text-sm text-gray-600 mb-3">Listen to the correct pronunciation</p>
+                    <div id="mouth-container" class="flex flex-col items-center justify-center mb-3">
                         <img id="viseme-image" alt="" class="rounded-xl w-32 h-32 object-contain" />
                     </div>
                     <button id="btn-read"
-                            class="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white shadow hover:bg-slate-800">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6 inline">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
+                        class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-800 text-white shadow hover:bg-gray-700 transition">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                            stroke="currentColor" class="w-5 h-5">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
                         </svg>
-
-                         Listen
+                        Listen
                     </button>
                 </div>
-
-                <p class="text-center text-slate-500">
-                    When you're ready, press the button and start speaking.
-                </p>
-
-                <div id="speaking-speak" class="flex items-center justify-center pb-4">
-                    <div class="relative flex items-center justify-center w-36 h-36">
-                        <div id="progress-circle"
-                             class="absolute inset-0 rounded-full border-4 border-purple-200 border-t-purple-600 animate-spin-slow"></div>
-                        <button id="record-btn"
-                                class="relative z-10 flex items-center justify-center w-16 h-16 rounded-full bg-purple-600 text-white shadow-lg hover:bg-purple-700">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
-                            </svg>
-
-                        </button>
-                    </div>
-                </div>
             </div>
-            <!-- end:speaking -->
 
-
-            <!-- start:analysis-section -->
-            <div id="analysis-section" class="mt-8 mb-8 hidden-section hidden">
-
-                <div data-role="result.has-errors" class="hidden">
-                    <p class="mt-2 text-2xl text-center font-semibold text-purple-600">
-                        Score:
-                    <span data-role="pronunciation.score">--</span></p>
-    
-                    <div class="mt-8" id="errors-card-section">
-                        <h3 class="text-lg font-semibold text-gray-700 text-center">
-                            Improve your pronunciation
-                        </h3>
-                        <p class="text-center text-gray-500" lang="en">
-                            Practice pronouncing the following words correctly.
-                        </p>
-                        
-                        <div id="errors-card-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6 mt-6">
-                            <!-- Les cartes seront ajoutées ici dynamiquement -->
-                        </div>
-
-                        <div class="mt-16" data-role="pronunciation.chart">
-                            <div class="text-lg font-semibold text-gray-700 text-center">
-                                Statistics
-                            </div>
-                            <div class="mt-8">
-                                <canvas
-                                    class="h-12" 
-                                    id="pronunciationChart"></canvas>
-                            </div>
-                        </div>
-
-                        <div class="mt-16" data-role="prosodie.chart">
-                            <div class="text-lg font-semibold text-gray-700 text-center" lang="en">
-                                Rhythm and Intonation
-                            </div>
-                            <div class="mt-8">
-                                <canvas id="prosodyChart" class="h-24"></canvas>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Template pour générer dynamiquement les cartes -->
-                    <template id="error-card-template">
-                        <div class="card bg-white p-4 rounded-xl shadow-lg transform transition hover:scale-105 flex flex-col items-center text-center">
-                            <div class="text-xl font-bold text-purple-700" data-role="word"></div>
-                            <div class="text-gray-500 mt-1">
-                                <span class="hidden text-red-600" data-role="actual"></span>
-                                <span class="hidden  mx-2">→</span>
-                                <span class="text-green-600 font-semibold" data-role="expected"></span>
-                            </div>
-                            <button class="play-audio mt-3 px-4 py-2 bg-purple-500 text-white rounded-lg shadow-md hover:bg-purple-600 transition">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6 inline">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
-                                </svg>
-                                Listen
-                            </button>
-                            <img class="viseme-img mt-4 w-24 h-24 rounded-lg cursor-pointer hover:opacity-80 transition" src="" alt="Visème">
-                        </div>
-                    </template>
-                    
-                    <!-- Template pour générer dynamiquement les erreurs -->
-                    <template id="error-row-template">
-                        <tr class="border border-gray-300">
-                            <td class="border border-gray-300 px-4 py-2 font-semibold" data-role="word"></td>
-                            <td class="hidden border border-gray-300 px-4 py-2 text-red-600" data-role="actual"></td>
-                            <td class="border border-gray-300 px-4 py-2 text-green-600" data-role="expected"></td>
-                            <td class="border border-gray-300 px-4 py-2 text-center">
-                                <img class="viseme-img w-24 h-24 rounded-lg cursor-pointer hover:opacity-75" src="" alt="Visème">
-                            </td>
-                        </tr>
-                    </template>
-    
-                    <div class="mt-4 hidden">
-                        <h3 class="text-lg font-semibold text-gray-700">Ce qu'un anglais aurait pu comprendre :</h3>
-                        <p id="transcript" data-role="pronunciation.transcribe" class="mt-2 text-gray-600 italic">--</p>
-                    </div>
-                </div>
-    
-                <div data-role="result.no-errors" class="hidden text-center">
-                    <p class="text-xl font-semibold text-green-600">
-                        Well done! Your pronunciation is excellent.
-                    </p>
-                    <div>
-                        <dotlottie-player src="https://lottie.host/e1b65ac5-e33d-4cfb-afd4-7d08ef57537c/7w8dOgAjIZ.lottie" background="transparent" speed="1" style="width: 300px; height: 300px;  margin: 0 auto" loop autoplay></dotlottie-player>
-                        <!--<dotlottie-player src="https://lottie.host/b9c85163-edc7-415c-89ed-5c9d14cc6346/FJx54Ofwxr.lottie" background="transparent" speed="1" style="width: 300px; height: 300px; margin: 0 auto" loop autoplay></dotlottie-player>-->
-                    </div>
-                </div>
+            <!-- Analyze Button (hidden by default, shown after recording/upload) -->
+            <div class="text-center hidden" id="analyze-btn-container">
+                <button id="analyze-btn"
+                    class="px-8 py-3 bg-red-600 text-white font-semibold rounded-lg shadow-md hover:bg-red-700 transition">
+                    Start Analysis
+                </button>
             </div>
-            <!-- end:analysis-section -->
-
-
-
         </div>
+
+        <!-- Loading State -->
+        <div id="loading" class="hidden bg-white rounded-lg shadow-md p-12 text-center">
+            <div class="mb-6 text-xl font-medium text-gray-800">Analyzing your speech...</div>
+            <div class="flex justify-center items-center space-x-2 h-16">
+                <div class="w-2 h-8 bg-blue-600 rounded-full animate-[pulse_1s_ease-in-out_infinite]"></div>
+                <div class="w-2 h-12 bg-blue-600 rounded-full animate-[pulse_1s_ease-in-out_0.2s_infinite]"></div>
+                <div class="w-2 h-16 bg-blue-600 rounded-full animate-[pulse_1s_ease-in-out_0.4s_infinite]"></div>
+                <div class="w-2 h-12 bg-blue-600 rounded-full animate-[pulse_1s_ease-in-out_0.2s_infinite]"></div>
+                <div class="w-2 h-8 bg-blue-600 rounded-full animate-[pulse_1s_ease-in-out_infinite]"></div>
+            </div>
+        </div>
+
+        <!-- Error State -->
+        <div id="error" class="hidden bg-white rounded-lg shadow-md p-8 text-center">
+            <p class="text-lg font-semibold text-red-600 mb-4">An error occurred.</p>
+            <p class="text-gray-600 mb-6">Our service might be temporarily unavailable, or your internet connection is
+                unstable. Please try again.</p>
+            <dotlottie-player src="https://lottie.host/19ecd853-f89f-4b22-b152-d3d141794994/hrHxh5UYNa.lottie"
+                background="transparent" speed="1" style="margin: 0 auto; width: 300px; height: 300px" loop
+                autoplay></dotlottie-player>
+            <button id="retry-btn" class="mt-6 px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition">
+                Retry
+            </button>
+        </div>
+
+        <!-- Results Section -->
+        <div id="analysis-section" class="hidden bg-white rounded-lg shadow-md p-8">
+
+            <!-- Success Result (Perfect Score) -->
+            <div data-role="result.no-errors" class="hidden text-center">
+                <p class="text-xl font-semibold text-green-600 mb-4">Well done! Your pronunciation is excellent.</p>
+                <dotlottie-player src="https://lottie.host/e1b65ac5-e33d-4cfb-afd4-7d08ef57537c/7w8dOgAjIZ.lottie"
+                    background="transparent" speed="1" style="width: 300px; height: 300px; margin: 0 auto" loop
+                    autoplay></dotlottie-player>
+            </div>
+
+            <!-- Analysis Results -->
+            <div data-role="result.has-errors" class="hidden">
+
+                <!-- Success Banner -->
+                <div class="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+                    <div class="flex items-start">
+                        <svg class="w-6 h-6 text-green-600 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd"
+                                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                clip-rule="evenodd" />
+                        </svg>
+                        <div class="flex-1">
+                            <p class="font-semibold text-green-800">Analysis completed successfully!</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Transcription Section -->
+                <div class="mb-8">
+                    <h3 class="text-2xl font-bold text-gray-800 mb-4">Transcription</h3>
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <div class="flex items-start">
+                            <svg class="w-6 h-6 text-blue-600 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                            </svg>
+                            <div class="flex-1">
+                                <p class="text-sm font-semibold text-blue-800 mb-1">Heard:</p>
+                                <p class="text-gray-700" data-role="pronunciation.transcribe">--</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Global Scores Section -->
+                <div class="mb-8">
+                    <h3 class="text-2xl font-bold text-gray-800 mb-6">Overall Scores</h3>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <!-- Left: Circular Chart -->
+                        <div class="flex flex-col items-center justify-center">
+                            <p class="text-sm text-gray-600 mb-4">Overall Score</p>
+                            <div class="relative w-48 h-48">
+                                <svg class="transform -rotate-90 w-48 h-48">
+                                    <circle cx="96" cy="96" r="80" stroke="#e5e7eb" stroke-width="16" fill="none" />
+                                    <circle id="score-circle" cx="96" cy="96" r="80" stroke="#10b981" stroke-width="16"
+                                        fill="none" stroke-dasharray="502.4" stroke-dashoffset="502.4"
+                                        stroke-linecap="round" />
+                                </svg>
+                                <div class="absolute inset-0 flex items-center justify-center">
+                                    <span class="text-4xl font-bold text-gray-800"
+                                        data-role="pronunciation.score">--</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right: Details with Progress Bars -->
+                        <div class="flex flex-col justify-center space-y-4">
+                            <p class="text-lg font-semibold text-gray-700 mb-2">Details</p>
+
+                            <!-- Accuracy -->
+                            <div>
+                                <div class="flex justify-between mb-1">
+                                    <span class="text-sm font-medium text-gray-700">Accuracy:</span>
+                                    <span class="text-sm font-medium text-gray-700"
+                                        data-role="score.accuracy">--/100</span>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-2">
+                                    <div class="bg-blue-500 h-2 rounded-full" data-role="bar.accuracy"
+                                        style="width: 0%"></div>
+                                </div>
+                            </div>
+
+                            <!-- Fluency -->
+                            <div>
+                                <div class="flex justify-between mb-1">
+                                    <span class="text-sm font-medium text-gray-700">Fluency:</span>
+                                    <span class="text-sm font-medium text-gray-700"
+                                        data-role="score.fluency">--/100</span>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-2">
+                                    <div class="bg-blue-500 h-2 rounded-full" data-role="bar.fluency" style="width: 0%">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Completeness -->
+                            <div>
+                                <div class="flex justify-between mb-1">
+                                    <span class="text-sm font-medium text-gray-700">Completeness:</span>
+                                    <span class="text-sm font-medium text-gray-700"
+                                        data-role="score.completeness">--/100</span>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-2">
+                                    <div class="bg-blue-500 h-2 rounded-full" data-role="bar.completeness"
+                                        style="width: 0%"></div>
+                                </div>
+                            </div>
+
+                            <!-- Prosody -->
+                            <div>
+                                <div class="flex justify-between mb-1">
+                                    <span class="text-sm font-medium text-gray-700">Prosody:</span>
+                                    <span class="text-sm font-medium text-gray-700"
+                                        data-role="score.prosody">--/100</span>
+                                </div>
+                                <div class="w-full bg-gray-200 rounded-full h-2">
+                                    <div class="bg-blue-500 h-2 rounded-full" data-role="bar.prosody" style="width: 0%">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Word-by-Word Details -->
+                <div class="mb-8">
+                    <h3 class="text-2xl font-bold text-gray-800 mb-4">Word-by-Word Details</h3>
+
+                    <!-- Collapsible Phonetic Analysis -->
+                    <details class="border border-gray-200 rounded-lg" open>
+                        <summary class="cursor-pointer p-4 hover:bg-gray-50 flex items-center">
+                            <svg class="w-5 h-5 text-gray-600 mr-2" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                            <span class="font-medium text-gray-700">View detailed phonetic analysis</span>
+                        </summary>
+
+                        <div class="p-4 border-t border-gray-200" id="word-details-container">
+                            <!-- Word details will be inserted here by JavaScript -->
+                        </div>
+                    </details>
+                </div>
+
+            </div>
+
+            <!-- Template for Word Detail -->
+            <template id="word-detail-template">
+                <div class="word-detail mb-6 pb-6 border-b border-gray-200 last:border-b-0">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex-1 flex items-center gap-2">
+                            <h4 class="text-lg font-semibold" data-role="word.name">word</h4>
+                            <button
+                                class="text-gray-400 hover:text-blue-600 transition-colors p-1 rounded-full hover:bg-blue-50"
+                                data-role="word.listen" title="Listen to pronunciation">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        <!-- Phonetic Breakdown moved below -->
+                    </div>
+
+                    <!-- Phonetic Breakdown -->
+                    <div class="text-sm text-gray-600 mb-2" data-role="word.phonemes">
+                        <!-- Phonemes will be inserted here -->
+                    </div>
+
+                    <!-- Score and Bar on the right -->
+                    <div class="flex items-center gap-4 w-1/3">
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div class="bg-blue-500 h-2 rounded-full" data-role="word.bar" style="width: 0%"></div>
+                        </div>
+                        <span class="text-sm font-medium text-gray-600 min-w-[3rem] text-right"
+                            data-role="word.score">--</span>
+                    </div>
+                </div>
+
+                <!-- Error Type (if applicable) -->
+                <div class="error-type hidden mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded flex items-center">
+                    <svg class="w-5 h-5 text-yellow-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd"
+                            d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                            clip-rule="evenodd" />
+                    </svg>
+                    <span class="text-sm font-medium text-yellow-800">Error type: <span
+                            data-role="error.type">--</span></span>
+                </div>
+        </div>
+        </template>
+    </div>
     </div>
 
-
-    
-    
-    <script src="/static/audio.js"></script>
-    <script src="/static/viseme.js"></script>
-    <script src="/static/ui.js"></script>
-
-<script src="https://unpkg.com/@dotlottie/player-component@2.7.12/dist/dotlottie-player.mjs" type="module"></script>
+    <script src="/static/audio.js?v=10"></script>
+    <script src="/static/viseme.js?v=10"></script>
+    <script src="/static/ui.js?v=11"></script>
+    <script src="https://unpkg.com/@dotlottie/player-component@2.7.12/dist/dotlottie-player.mjs" type="module"></script>
 
 </body>
+
 </html>

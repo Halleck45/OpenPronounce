@@ -15,7 +15,7 @@ class AudioRecorder {
             this.stop();
             return;
         }
-    
+
         try {
             // 🔴 Demande l'accès au micro seulement ici, et non plus au chargement de la page
             this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -25,27 +25,27 @@ class AudioRecorder {
             this.analyser.fftSize = 256;
             source.connect(this.analyser);
             this.mediaRecorder = new MediaRecorder(this.stream);
-    
+
             this.mediaRecorder.ondataavailable = event => {
                 this.audioChunks.push(event.data);
             };
-    
+
             this.mediaRecorder.onstop = () => this.processAudio();
-    
+
             this.started = true;
             this.audioChunks = [];
-    
+
             this.mediaRecorder.start();
             requestAnimationFrame(() => this.checkSilence());
-    
+
             document.dispatchEvent(new Event('record:start'));
-    
+
             setTimeout(() => this.stop(), 60000);
         } catch (err) {
             console.error("Erreur d'accès au micro: ", err);
         }
     }
-    
+
     stop() {
 
         if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
@@ -61,10 +61,10 @@ class AudioRecorder {
             this.audioContext.close();
         }
 
-        if(!this.started) {
+        if (!this.started) {
             return;
         }
-        
+
         this.started = false;
 
         document.dispatchEvent(new Event('record:stop'));
@@ -83,7 +83,7 @@ class AudioRecorder {
         let dataArray = new Uint8Array(this.analyser.frequencyBinCount);
         this.analyser.getByteFrequencyData(dataArray);
         let average = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
-        
+
         if (average < this.silenceThreshold) {
             if (!this.silenceTimer) {
                 this.silenceTimer = setTimeout(() => this.stopDueToSilence(), this.silenceDuration);
@@ -100,6 +100,14 @@ class AudioRecorder {
 
     processAudio() {
         const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
+
+        // Show audio player with recorded audio
+        const audioPlayer = document.getElementById('audio-player');
+        const audioPlayerContainer = document.getElementById('audio-player-container');
+        const url = URL.createObjectURL(audioBlob);
+        audioPlayer.src = url;
+        audioPlayerContainer.classList.remove('hidden');
+
         this.sendAudioToAPI(audioBlob);
     }
 
@@ -111,7 +119,7 @@ class AudioRecorder {
     sendSpeechToAPI(audioBlob) {
         const formData = new FormData();
         formData.append("file", audioBlob, "audio.webm");
-        
+
         fetch("/speech2text", { method: "POST", body: formData })
             .then(response => response.json())
             .then(data => {
@@ -124,7 +132,7 @@ class AudioRecorder {
         const formData = new FormData();
         formData.append("file", audioBlob, "audio.webm");
         formData.append("expected_text", document.getElementById('expected-text').value);
-        
+
         fetch("/pronunciation", { method: "POST", body: formData })
             .then(response => response.json())
             .then(data => {
@@ -143,7 +151,7 @@ class AudioRecorder {
     sendGrammarApi(text) {
         const formData = new FormData();
         formData.append("text", text);
-        
+
         fetch("/grammar", { method: "POST", body: formData })
             .then(response => response.json())
             .then(data => {

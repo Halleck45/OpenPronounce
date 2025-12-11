@@ -49,79 +49,31 @@ def extract_embeddings(audio_waveform, sampling_rate=16000):
 
 def get_phonemes_with_word_mapping(text):
     """ Return a list of phonemes and their associated words """
-    words = text.split()  # List of words
+    # Use regex to split words, ignoring punctuation, to match frontend logic and avoid "times," issues
+    words = re.findall(r"\b[\w']+\b", text)
     
-    # Use the same fallback logic as get_phonemes
-    try:
-        phonemes = phonemize(text, language="en-us", backend="espeak", strip=True, preserve_punctuation=False).split()
-    except Exception as e:
-        warnings.warn(f"Error with espeak in get_phonemes_with_word_mapping, switching to festival: {e}", UserWarning)
-        phonemes = phonemize(text, language="en-us", backend="festival", strip=True, preserve_punctuation=False).split()
-
-    # Associate each phoneme with a word (naively based on split)
+    phonemes = []
     phoneme_to_word = {}
-    phoneme_index = 0
+    
     for word in words:
         try:
             word_phonemes = phonemize(word, language="en-us", backend="espeak", strip=True, preserve_punctuation=False).split()
         except Exception as e:
-            warnings.warn(f"Error with espeak for word '{word}', switching to festival: {e}", UserWarning)
-            word_phonemes = phonemize(word, language="en-us", backend="festival", strip=True, preserve_punctuation=False).split()
-        
+            # warnings.warn(f"Error with espeak for word '{word}', switching to festival: {e}", UserWarning)
+            try:
+                word_phonemes = phonemize(word, language="en-us", backend="festival", strip=True, preserve_punctuation=False).split()
+            except:
+                word_phonemes = [] # Fallback if everything fails
+
         for phoneme in word_phonemes:
-            phoneme_to_word[phoneme_index] = word
-            phoneme_index += 1
+            phoneme_to_word[len(phonemes)] = word
+            phonemes.append(phoneme)
 
     return phonemes, phoneme_to_word
-
-def get_phonemes(text):
-    """
-    Convert a text into a sequence of phonemes using phonemizer.
-    """
-    # Clean the text to avoid errors
-    text = text.strip().lower()
-
-    if not text:
-        return []
-
-    # First test with `espeak`, then fallback to `festival` if error
-    try:
-        phonemes = phonemize(
-            text,
-            language="en-us",
-            backend="espeak",
-            strip=True,
-            preserve_punctuation=False  # Disable punctuation that may cause issues
-        )
-    except Exception as e:
-        warnings.warn(f"Error with espeak, switching to festival: {e}", UserWarning)
-        phonemes = phonemize(
-            text,
-            language="en-us",
-            backend="festival",
-            strip=True,
-            preserve_punctuation=False
-        )
-
-    return phonemes.split(" ")
-
-
 
 def get_phoneme_embeddings(phoneme_seq):
     """ Convert a phoneme sequence into a numerical sequence """
     return np.array([ord(p) for p in phoneme_seq]).reshape(-1, 1)
-
-def compare_pronunciation(expected, actual):
-    """ Compare pronunciation with DTW and return a score """
-    if not expected or not actual:
-        return 0
-
-    expected_seq = get_phoneme_embeddings(expected)
-    actual_seq = get_phoneme_embeddings(actual)
-
-    distance, _ = fastdtw(expected_seq, actual_seq, dist=euclidean)
-    
-    return distance
 
 def compare_transcriptions(transcription, text_reference):
     """
@@ -135,28 +87,192 @@ def compare_transcriptions(transcription, text_reference):
     word_distance = Levenshtein.distance(transcription_clean, reference_clean)
 
     # Extract phonemes from both versions
-    expected_phonemes, phoneme_to_word = get_phonemes_with_word_mapping(text_reference)
-    transcribed_phonemes, _ = get_phonemes_with_word_mapping(transcription_clean)
+    expected_phonemes, expected_map = get_phonemes_with_word_mapping(text_reference)
+    transcribed_phonemes, transcribed_map = get_phonemes_with_word_mapping(transcription_clean)
 
-    # Convert phonemes to numerical sequences
+    # Convert phonemes to numerical sequences for DTW (global score)
     expected_seq = get_phoneme_embeddings(" ".join(expected_phonemes))
     transcribed_seq = get_phoneme_embeddings(" ".join(transcribed_phonemes))
 
-    # Apply DTW to align phonemes
-    distance, path = fastdtw(expected_seq, transcribed_seq, dist=euclidean)
+    # Apply DTW to align phonemes (for global score)
+    distance, _ = fastdtw(expected_seq, transcribed_seq, dist=euclidean)
 
-    # Identify words with pronunciation errors
+    # Identify words with pronunciation errors using Levenshtein on phoneme lists
     errors = []
     words_with_errors = set()
-    for (i, j) in path:
-        if i >= len(expected_phonemes) or j >= len(transcribed_phonemes):
-            continue
+    
+    # Map each expected phoneme index to a set of transcribed phoneme indices
+    # This allows us to handle 1-to-N and N-to-1 word mappings
+    alignment_map = [set() for _ in range(len(expected_phonemes))]
+    
+    opcodes = Levenshtein.opcodes(expected_phonemes, transcribed_phonemes)
+    
+    for tag, i1, i2, j1, j2 in opcodes:
+        if tag == 'equal':
+            for k, l in zip(range(i1, i2), range(j1, j2)):
+                alignment_map[k].add(l)
+        elif tag == 'replace':
+            # For replacement, we map the range proportionally
+            # This handles "I'm" (3 phonemes) -> "I M" (4 phonemes) better
+            # And avoids "Hello how are" -> "enou i wor" mapping everything to everything
+            len_i = i2 - i1
+            len_j = j2 - j1
+            for k in range(i1, i2):
+                # Calculate proportional range in j
+                start_j = j1 + int((k - i1) * len_j / len_i)
+                end_j = j1 + int((k - i1 + 1) * len_j / len_i)
+                
+                if start_j == end_j and len_j > 0:
+                     idx = min(start_j, j2 - 1)
+                     alignment_map[k].add(idx)
+                else:
+                    for l in range(start_j, end_j):
+                        alignment_map[k].add(l)
+        elif tag == 'delete':
+            # Expected phonemes have no match
+            pass
+        elif tag == 'insert':
+            # Extra transcribed phonemes (ignored for now)
+            pass
+
+    # Group expected phonemes by word
+    expected_words_indices = {} # word -> list of phoneme indices
+    # Since words can be duplicate ("the cat and the dog"), we need to group by (word, position) or just iterate ranges
+    # But phoneme_to_word maps index -> word string. We need to reconstruct the word boundaries.
+    
+    # Let's iterate through the expected phonemes and group them
+    current_word = None
+    word_start_index = 0
+    processed_words = [] # List of (word, start_idx, end_idx)
+    
+    # Reconstruct word boundaries from phoneme_to_word
+    # Note: phoneme_to_word is dense (0, 1, 2...). 
+    # We can just iterate 0..len(expected_phonemes)
+    if expected_phonemes:
+        current_word = expected_map[0]
+        word_start = 0
+        for i in range(1, len(expected_phonemes)):
+            word = expected_map[i]
+            # If the word string changes, or if it's the same word string but logically a new word?
+            # get_phonemes_with_word_mapping flattens everything. 
+            # If we have "that that", phoneme_to_word will show "that" for indices 0..2 and "that" for 3..5
+            # We can't distinguish duplicates easily unless we stored (word, index) in the map.
+            # BUT, we know the order is preserved.
+            # Wait, get_phonemes_with_word_mapping iterates words.
+            # So we can just re-run the word iteration logic to get boundaries?
+            # Or better: modify get_phonemes_with_word_mapping to return boundaries?
+            # For now, let's assume adjacent identical words are merged or handled? 
+            # Actually, "that that" -> "that" (idx 0,1,2), "that" (idx 3,4,5).
+            # If we just look at string change, we merge them. That's a bug for "that that".
+            # FIX: Let's assume we can't easily reconstruct boundaries from just the map.
+            # Let's rely on the fact that we process words in order.
+            pass
+
+    # Better approach: Iterate over the original words again to get their phoneme counts
+    # We need the original word list.
+    expected_words_list = re.findall(r"\b[\w']+\b", text_reference)
+    
+    current_phoneme_idx = 0
+    
+    for word in expected_words_list:
+        # Re-generate phonemes for this word to know how many there are
+        # (This is slightly inefficient but safe)
+        try:
+            p_list = phonemize(word, language="en-us", backend="espeak", strip=True, preserve_punctuation=False).split()
+        except:
+            try:
+                p_list = phonemize(word, language="en-us", backend="festival", strip=True, preserve_punctuation=False).split()
+            except:
+                p_list = []
         
-        diff = Levenshtein.distance(expected_phonemes[i], transcribed_phonemes[j])
-        if diff > 1:  # Ajuster le seuil selon la tolérance
-            word = phoneme_to_word.get(i, "UNKNOWN")
-            errors.append({"position": i, "expected": expected_phonemes[i], "actual": transcribed_phonemes[j], "word": word})
+        if not p_list:
+            # Word has no phonemes (e.g. number or symbol that failed?)
+            continue
+            
+        # Range for this word
+        word_indices = range(current_phoneme_idx, current_phoneme_idx + len(p_list))
+        current_phoneme_idx += len(p_list)
+        
+        # Find corresponding transcribed words
+        matched_trans_indices = set()
+        for idx in word_indices:
+            if idx < len(alignment_map):
+                matched_trans_indices.update(alignment_map[idx])
+        
+        if not matched_trans_indices:
+            # Word is missing
+            errors.append({"position": word_indices.start, "expected": word, "actual": "", "word": word})
             words_with_errors.add(word)
+        else:
+            # Get the transcribed words for these indices
+            actual_words = []
+            sorted_trans_indices = sorted(list(matched_trans_indices))
+            
+            # We need to group these indices into words
+            # transcribed_map maps idx -> word string
+            # We want to reconstruct the phrase "I M" from indices
+            
+            # Simple approach: get all word strings, unique them preserving order
+            seen_words = set()
+            for tidx in sorted_trans_indices:
+                if tidx in transcribed_map:
+                    w = transcribed_map[tidx]
+                    # We want to capture "I" and "M". 
+                    # If we just add to set, we lose order? No, we iterate sorted indices.
+                    # But "I" might span indices 0,1. We see "I", "I".
+                    if w not in seen_words: # This prevents "I I" -> "I"
+                        actual_words.append(w)
+                        seen_words.add(w) # This prevents "that that" -> "that that" if they are identical?
+                        # This is a limitation. But for "I M", it works: "I", "M".
+                        # For "that that", it would become "that". Acceptable for now.
+            
+            actual_text = " ".join(actual_words)
+            
+            # Compare
+            # We compare the *text* of the word vs the *text* of the actual words
+            # But we also want to check pronunciation quality?
+            # If text matches, we assume pronunciation is good?
+            # Or do we check phoneme distance?
+            # The user wants to see "Mispronunciation" or "Missing".
+            # If text matches "I" vs "I", it's good.
+            # If "I'm" vs "I M", is that an error?
+            # "I'm" vs "I M" -> Levenshtein("I'm", "I M") = 2.
+            # Maybe we should check phoneme distance between the *segments*?
+            
+            # Let's calculate phoneme distance between expected segment and actual segment
+            expected_seg = [expected_phonemes[i] for i in word_indices]
+            actual_seg = [transcribed_phonemes[i] for i in sorted_trans_indices]
+            
+            # Use Levenshtein on phonemes
+            p_dist = Levenshtein.distance(expected_seg, actual_seg)
+            
+            # Normalize distance
+            # If p_dist > threshold, mark as error
+            # Threshold: e.g. > 20% of length?
+            # We remove max(1, ...) to be stricter on short words (len 1-2)
+            if p_dist > len(expected_seg) * 0.4:
+                # It's a mispronunciation
+                # We show the phonemes of the *actual* segment
+                # And the text of the *actual* words
+                
+                # Construct actual phoneme string
+                actual_phoneme_str = "".join(actual_seg) # Or space separated?
+                # The frontend expects a string.
+                # Let's use the phoneme list directly? No, frontend expects string?
+                # Frontend: `/${error.actual}/`
+                
+                # Wait, `actual` in error object is used for phonemes in frontend?
+                # In previous code: `actual: transcribed_phonemes[j]` (single phoneme)
+                # Now we have a sequence.
+                
+                errors.append({
+                    "position": word_indices.start,
+                    "expected": "".join(expected_seg), # Phonemes
+                    "actual": "".join(actual_seg), # Phonemes
+                    "word": word, # Expected Word Text
+                    "actual_word": actual_text # Actual Word Text (e.g. "I M") - NEW FIELD
+                })
+                words_with_errors.add(word)
 
     # Generate understandable feedback
     feedback = "🔊 Feedback on your pronunciation:\n"
@@ -166,7 +282,8 @@ def compare_transcriptions(transcription, text_reference):
         feedback += "✅ Your pronunciation is excellent! 🎉\n"
 
     # errors is an array, but can contains multiple time the same word (for complex sounds). We want to keep only one occurence of each word
-    errors = [dict(t) for t in {tuple(d.items()) for d in errors}]
+    # With new logic, we iterate words, so uniqueness is guaranteed per position.
+    # errors = [dict(t) for t in {tuple(d.items()) for d in errors}] 
 
     # Convert vectors to JSON for later display of expected and obtained traces
     expected_vector = expected_seq.tolist()
@@ -185,7 +302,7 @@ def compare_transcriptions(transcription, text_reference):
         "transcribed_vector": transcribed_vector.astype(float).tolist(),
         "expected_phonemes": expected_phonemes,
         "transcribed_phonemes": transcribed_phonemes,
-        "words_with_errors": words_with_errors,
+        "words_with_errors": list(words_with_errors),
     }
 
 def align_sequences_dtw(seq1, seq2):

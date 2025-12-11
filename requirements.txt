@@ -14,3 +14,6 @@ fastdtw
 scipy
 python-Levenshtein
 scikit-learn
+streamlit
+plotly
+requests

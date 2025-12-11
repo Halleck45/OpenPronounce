@@ -99,6 +99,8 @@ viseme.play(['həloʊ', 'huː', 'ɑːɹ', 'juː']);
 
 ## Web application
 
+### FastAPI Server
+
 Mount the server:
 
 ```bash
@@ -108,6 +110,21 @@ python -m uvicorn server:app --host 0.0.0.0 --port 8000 --reload
 ![Web application screenshot](./docs/open-pronounce-preview.png)
 
 > Note: recording using your micro is not possible in Chrome with a no-https local environment.
+
+### Streamlit Application
+
+You can also run the application using Streamlit:
+
+```bash
+streamlit run streamlit_app.py
+```
+
+The Streamlit app provides:
+- Text input for the expected pronunciation
+- Audio file upload (WAV, MP3, M4A, OGG, WEBM)
+- Text-to-speech to listen to the correct pronunciation
+- Detailed analysis results with scores, transcription, and word-by-word feedback
+- Interactive charts for prosody (F0 and energy) and phoneme comparison
 
 ## Contributing
 

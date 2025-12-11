@@ -1,4 +1,5 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Request
+from fastapi.responses import FileResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
@@ -54,6 +55,15 @@ async def api_phonemes(text: str = Form(...)):
             "phonemes": phonemes,
             "words": list(words.values())
         }
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=500, detail='Something went wrong')
+
+@app.post("/tts")
+async def api_tts(text: str = Form(...)):
+    try:
+        filename = audio.text2speech(text)
+        return FileResponse(filename, media_type="audio/wav")
     except Exception as e:
         print(e)
         raise HTTPException(status_code=500, detail='Something went wrong')
