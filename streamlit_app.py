@@ -1,20 +1,13 @@
 import streamlit as st
 import streamlit.components.v1 as components
-import threading
-import time
-import uvicorn
-from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Request
-from fastapi.responses import FileResponse
-from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
-import speech
-import random
-import audio
-import string
 import os
-import socket
-import requests
+import tempfile
+import base64
+import json
+import speech
+import audio
+import random
+import string
 
 # Configuration de la page Streamlit
 st.set_page_config(
@@ -23,60 +16,232 @@ st.set_page_config(
     layout="wide"
 )
 
-# Créer l'application FastAPI
-app = FastAPI()
+# Chemins des fichiers
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 
-# Ajouter CORS pour permettre les requêtes depuis Streamlit
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Monter les fichiers statiques
-static_dir = os.path.join(os.path.dirname(__file__), "static")
-templates_dir = os.path.join(os.path.dirname(__file__), "templates")
-
-if os.path.exists(static_dir):
-    app.mount("/static", StaticFiles(directory=static_dir), name="static")
-if os.path.exists(templates_dir):
-    templates = Jinja2Templates(directory=templates_dir)
-
-def upload_webp(file):
-    tempname_random = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-    destination = f'/tmp/{tempname_random}.webm'
-
-    with open(destination, 'wb') as buffer:
-        buffer.write(file.file.read())
-
-    return audio.webp2wav(destination)
-
-@app.post("/pronunciation")
-async def api_analyze_pronunciation(file: UploadFile = File(...), expected_text: str = Form(...)):
-    wav_file = upload_webp(file)
-    try:
-        sound = audio.load(wav_file)
-        return speech.compare_audio_with_text(sound, expected_text)
-    except Exception as e:
-        print(e)
-        raise HTTPException(status_code=500, detail='Something went wrong')
-
-@app.post("/speech2text")
-async def api_speech2text(file: UploadFile = File(...)):
-    wav_file = upload_webp(file)
-    try:
-        sound = audio.load(wav_file)
-        return {
-            "transcript": speech.transcribe(sound),
-        }
-    except Exception as e:
-        print(e)
-        raise HTTPException(status_code=500, detail='Something went wrong')
+def load_html_with_integrated_scripts():
+    """Load HTML and integrate JS scripts directly"""
+    html_path = os.path.join(TEMPLATES_DIR, "index.html")
+    if not os.path.exists(html_path):
+        return None
     
-@app.post("/phonemes")
-async def api_phonemes(text: str = Form(...)):
+    with open(html_path, 'r', encoding='utf-8') as f:
+        html_content = f.read()
+    
+    # Integrate JS files directly into HTML
+    for js_file in ['audio.js', 'viseme.js', 'ui.js']:
+        js_path = os.path.join(STATIC_DIR, js_file)
+        if os.path.exists(js_path):
+            with open(js_path, 'r', encoding='utf-8') as f:
+                js_content = f.read()
+            # Replace external scripts with inline content
+            html_content = html_content.replace(
+                f'<script src="/static/{js_file}?v=10"></script>',
+                f'<script>{js_content}</script>'
+            )
+            html_content = html_content.replace(
+                f'<script src="/static/{js_file}?v=11"></script>',
+                f'<script>{js_content}</script>'
+            )
+    
+    # Add a wrapper that intercepts fetch() calls and redirects them to Streamlit
+    api_wrapper = """
+    <script>
+    // Wrapper to intercept API calls and use window.parent.postMessage
+    (function() {
+        const originalFetch = window.fetch;
+        const pendingRequests = new Map();
+        let requestIdCounter = 0;
+        
+        window.fetch = function(url, options = {}) {
+            // Check if it's an API endpoint call
+            const apiEndpoints = ['/pronunciation', '/speech2text', '/phonemes', '/tts'];
+            const isApiCall = apiEndpoints.some(endpoint => url.includes(endpoint));
+            
+            if (isApiCall && window.parent && window.parent !== window) {
+                // This is an API call from the HTML component
+                return new Promise((resolve, reject) => {
+                    const requestId = `req_${requestIdCounter++}_${Date.now()}`;
+                    
+                    // Store the promise
+                    pendingRequests.set(requestId, { resolve, reject });
+                    
+                    // If it's a FormData, convert it to base64
+                    if (options.body instanceof FormData) {
+                        const formData = options.body;
+                        const file = formData.get('file');
+                        const expectedText = formData.get('expected_text') || formData.get('text');
+                        
+                        if (file instanceof File || file instanceof Blob) {
+                            // Convert file to base64
+                            const reader = new FileReader();
+                            reader.onload = function() {
+                                const base64 = reader.result.split(',')[1];
+                                window.parent.postMessage({
+                                    type: 'api_request',
+                                    requestId: requestId,
+                                    url: url,
+                                    method: options.method || 'POST',
+                                    fileData: base64,
+                                    expectedText: expectedText,
+                                    text: expectedText
+                                }, '*');
+                            };
+                            reader.readAsDataURL(file);
+                        } else {
+                            // No file, just text
+                            window.parent.postMessage({
+                                type: 'api_request',
+                                requestId: requestId,
+                                url: url,
+                                method: options.method || 'POST',
+                                text: expectedText
+                            }, '*');
+                        }
+                    } else {
+                        // Simple request
+                        window.parent.postMessage({
+                            type: 'api_request',
+                            requestId: requestId,
+                            url: url,
+                            method: options.method || 'GET',
+                            body: options.body
+                        }, '*');
+                    }
+                    
+                    // Listen for response
+                    const messageHandler = (event) => {
+                        if (event.data && event.data.type === 'api_response' && event.data.requestId === requestId) {
+                            window.removeEventListener('message', messageHandler);
+                            pendingRequests.delete(requestId);
+                            
+                            if (event.data.error) {
+                                reject(new Error(event.data.error));
+                            } else {
+                                // Create a fetch-like response
+                                let responseData = event.data.data;
+                                
+                                // For TTS, convert base64 to blob
+                                if (url.includes('/tts') && responseData.audio) {
+                                    const audioBlob = base64ToBlob(responseData.audio, 'audio/wav');
+                                    const response = new Response(audioBlob, {
+                                        status: 200,
+                                        statusText: 'OK',
+                                        headers: { 'Content-Type': 'audio/wav' }
+                                    });
+                                    resolve(response);
+                                } else {
+                                    const response = new Response(
+                                        JSON.stringify(responseData),
+                                        {
+                                            status: 200,
+                                            statusText: 'OK',
+                                            headers: { 'Content-Type': 'application/json' }
+                                        }
+                                    );
+                                    resolve(response);
+                                }
+                            }
+                        }
+                    };
+                    
+                    window.addEventListener('message', messageHandler);
+                    
+                    // Timeout après 60 secondes
+                    setTimeout(() => {
+                        window.removeEventListener('message', messageHandler);
+                        pendingRequests.delete(requestId);
+                        reject(new Error('Request timeout'));
+                    }, 60000);
+                });
+            }
+            
+            // For other requests, use normal fetch
+            return originalFetch(url, options);
+        };
+        
+        function base64ToBlob(base64, mimeType) {
+            const byteCharacters = atob(base64);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            return new Blob([byteArray], { type: mimeType });
+        }
+        
+        // Listen for response messages from Streamlit
+        window.addEventListener('message', (event) => {
+            if (event.data && event.data.type === 'api_response') {
+                const { requestId } = event.data;
+                const pending = pendingRequests.get(requestId);
+                if (pending) {
+                    if (event.data.error) {
+                        pending.reject(new Error(event.data.error));
+                    } else {
+                        pending.resolve(new Response(
+                            JSON.stringify(event.data.data),
+                            { status: 200, headers: { 'Content-Type': 'application/json' } }
+                        ));
+                    }
+                    pendingRequests.delete(requestId);
+                }
+            }
+        });
+    })();
+    </script>
+    """
+    
+    # Insert wrapper before closing </body>
+    html_content = html_content.replace('</body>', api_wrapper + '</body>')
+    
+    return html_content
+
+# Functions to handle API calls
+def handle_pronunciation_api(file_data_base64, expected_text):
+    """Handle /pronunciation endpoint"""
+    try:
+        file_bytes = base64.b64decode(file_data_base64)
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.webm') as tmp_file:
+            tmp_file.write(file_bytes)
+            tmp_path = tmp_file.name
+        
+        try:
+            wav_file = audio.webp2wav(tmp_path)
+            sound = audio.load(wav_file)
+            result = speech.compare_audio_with_text(sound, expected_text)
+            return result
+        finally:
+            for f in [tmp_path, wav_file]:
+                if os.path.exists(f):
+                    os.unlink(f)
+    except Exception as e:
+        return {"error": str(e)}
+
+def handle_speech2text_api(file_data_base64):
+    """Handle /speech2text endpoint"""
+    try:
+        file_bytes = base64.b64decode(file_data_base64)
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.webm') as tmp_file:
+            tmp_file.write(file_bytes)
+            tmp_path = tmp_file.name
+        
+        try:
+            wav_file = audio.webp2wav(tmp_path)
+            sound = audio.load(wav_file)
+            transcript = speech.transcribe(sound)
+            return {"transcript": transcript}
+        finally:
+            for f in [tmp_path, wav_file]:
+                if os.path.exists(f):
+                    os.unlink(f)
+    except Exception as e:
+        return {"error": str(e)}
+
+def handle_phonemes_api(text):
+    """Handle /phonemes endpoint"""
     try:
         phonemes, words = speech.get_phonemes_with_word_mapping(text)
         return {
@@ -84,100 +249,67 @@ async def api_phonemes(text: str = Form(...)):
             "words": list(words.values())
         }
     except Exception as e:
-        print(e)
-        raise HTTPException(status_code=500, detail='Something went wrong')
+        return {"error": str(e)}
 
-@app.post("/tts")
-async def api_tts(text: str = Form(...)):
+def handle_tts_api(text):
+    """Handle /tts endpoint"""
     try:
         filename = audio.text2speech(text)
-        return FileResponse(filename, media_type="audio/wav")
+        with open(filename, 'rb') as f:
+            audio_data = f.read()
+        audio_base64 = base64.b64encode(audio_data).decode('utf-8')
+        
+        if os.path.exists(filename) and filename.startswith('/tmp'):
+            os.unlink(filename)
+        
+        return {"audio": audio_base64, "format": "wav"}
     except Exception as e:
-        print(e)
-        raise HTTPException(status_code=500, detail='Something went wrong')
+        return {"error": str(e)}
 
-@app.get("/")
-async def home(request: Request):
-    return templates.TemplateResponse(
-        request=request, name="index.html", context={}
+# Handle API requests via messages from HTML component
+if 'api_requests' not in st.session_state:
+    st.session_state.api_requests = {}
+
+# Create HTML component that can communicate with Streamlit
+html_content = load_html_with_integrated_scripts()
+
+if html_content:
+    # Create HTML component
+    components.html(
+        html_content,
+        height=1200,
+        scrolling=True
     )
-
-def find_free_port():
-    """Trouve un port libre"""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(('', 0))
-        s.listen(1)
-        port = s.getsockname()[1]
-    return port
-
-def run_server(port):
-    """Lance le serveur FastAPI"""
-    config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error")
-    server = uvicorn.Server(config)
-    server.run()
-
-def check_server_running(url, max_retries=10):
-    """Vérifie si le serveur est en cours d'exécution"""
-    for _ in range(max_retries):
-        try:
-            response = requests.get(url, timeout=1)
-            if response.status_code == 200:
-                return True
-        except:
-            time.sleep(0.5)
-    return False
-
-# Initialisation du serveur
-if 'server_port' not in st.session_state:
-    port = find_free_port()
-    st.session_state.server_port = port
-    st.session_state.server_started = False
-    st.session_state.server_ready = False
-
-# Démarrer le serveur si ce n'est pas déjà fait
-if not st.session_state.server_started:
-    server_thread = threading.Thread(target=run_server, args=(st.session_state.server_port,), daemon=True)
-    server_thread.start()
-    st.session_state.server_started = True
-
-# Vérifier que le serveur est prêt
-if st.session_state.server_started and not st.session_state.server_ready:
-    server_url = f"http://127.0.0.1:{st.session_state.server_port}"
-    if check_server_running(server_url):
-        st.session_state.server_ready = True
-
-# Afficher la page HTML dans un iframe avec st.components.v1.iframe (comme dans le billet de blog)
-if st.session_state.server_ready:
-    server_url = f"http://127.0.0.1:{st.session_state.server_port}"
     
-    components.iframe(server_url, height=1200, scrolling=True)
+    # Process pending API requests
+    # Note: Streamlit doesn't directly support bidirectional callbacks
+    # We'll use an approach with query parameters or session_state
+    
+    # For now, just display the component
+    # API calls will be handled via a polling or refresh system
 else:
-    st.info("⏳ Démarrage du serveur en cours... Veuillez patienter quelques secondes.")
-    st.rerun()
+    st.error("Unable to load HTML template")
 
-# Sidebar avec informations
+# Sidebar with information
 with st.sidebar:
-    st.header("ℹ️ Informations")
-    if st.session_state.server_ready:
-        st.success(f"✅ Serveur actif sur le port {st.session_state.server_port}")
-    else:
-        st.warning("⏳ Le serveur démarre...")
+    st.header("ℹ️ Information")
+    st.success("✅ Application active")
     
     st.markdown("---")
-    st.markdown("### 📚 Liens")
-    st.markdown("[📖 Article de blog](https://blog.lepine.pro/en/ai-wav2vec-pronunciation-vectorization/)")
+    st.markdown("### 📚 Links")
+    st.markdown("[📖 Blog article](https://blog.lepine.pro/en/ai-wav2vec-pronunciation-vectorization/)")
     st.markdown("[🐙 GitHub](https://github.com/Halleck45/OpenPronounce)")
     
     st.markdown("---")
-    st.markdown("### 🔧 Dépannage")
+    st.markdown("### 🔧 Troubleshooting")
     st.markdown("""
-    Si l'application ne se charge pas :
-    1. Attendez quelques secondes
-    2. Rafraîchissez la page
-    3. Vérifiez que les ports ne sont pas bloqués
+    If the application doesn't load:
+    1. Wait a few seconds
+    2. Refresh the page
+    3. Check the browser console for errors
     
-    **Pour le microphone :**
-    - Cliquez sur l'icône de cadenas dans la barre d'adresse
-    - Autorisez l'accès au microphone
-    - Si cela ne fonctionne pas, utilisez l'upload de fichier audio
+    **For the microphone:**
+    - Click on the lock icon in the address bar
+    - Allow microphone access
+    - If it doesn't work, use audio file upload
     """)
