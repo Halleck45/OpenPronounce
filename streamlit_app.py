@@ -60,8 +60,8 @@ def load_html_with_integrated_scripts():
             const apiEndpoints = ['/pronunciation', '/speech2text', '/phonemes', '/tts'];
             const isApiCall = apiEndpoints.some(endpoint => url.includes(endpoint));
             
-            if (isApiCall && window.parent && window.parent !== window) {
-                // This is an API call from the HTML component
+            if (isApiCall) {
+                // This is an API call - use query parameters to communicate with Streamlit
                 return new Promise((resolve, reject) => {
                     const requestId = `req_${requestIdCounter++}_${Date.now()}`;
                     
@@ -79,81 +79,106 @@ def load_html_with_integrated_scripts():
                             const reader = new FileReader();
                             reader.onload = function() {
                                 const base64 = reader.result.split(',')[1];
-                                window.parent.postMessage({
-                                    type: 'api_request',
+                                
+                                // Store request data in sessionStorage for Streamlit to access
+                                const requestData = {
                                     requestId: requestId,
                                     url: url,
                                     method: options.method || 'POST',
                                     fileData: base64,
                                     expectedText: expectedText,
                                     text: expectedText
-                                }, '*');
+                                };
+                                
+                                // Use query parameters to trigger Streamlit processing
+                                const params = new URLSearchParams(window.location.search);
+                                params.set('_api_req', JSON.stringify(requestData));
+                                window.location.search = params.toString();
+                            };
+                            reader.onerror = function() {
+                                reject(new Error('Failed to read file'));
                             };
                             reader.readAsDataURL(file);
                         } else {
                             // No file, just text
-                            window.parent.postMessage({
-                                type: 'api_request',
+                            const requestData = {
                                 requestId: requestId,
                                 url: url,
                                 method: options.method || 'POST',
                                 text: expectedText
-                            }, '*');
+                            };
+                            
+                            const params = new URLSearchParams(window.location.search);
+                            params.set('_api_req', JSON.stringify(requestData));
+                            window.location.search = params.toString();
                         }
                     } else {
                         // Simple request
-                        window.parent.postMessage({
-                            type: 'api_request',
+                        const requestData = {
                             requestId: requestId,
                             url: url,
                             method: options.method || 'GET',
                             body: options.body
-                        }, '*');
+                        };
+                        
+                        const params = new URLSearchParams(window.location.search);
+                        params.set('_api_req', JSON.stringify(requestData));
+                        window.location.search = params.toString();
                     }
                     
-                    // Listen for response
-                    const messageHandler = (event) => {
-                        if (event.data && event.data.type === 'api_response' && event.data.requestId === requestId) {
-                            window.removeEventListener('message', messageHandler);
+                    // Poll for response in sessionStorage (set by Streamlit)
+                    const checkResponse = setInterval(() => {
+                        const responseKey = `api_response_${requestId}`;
+                        const responseData = sessionStorage.getItem(responseKey);
+                        
+                        if (responseData) {
+                            clearInterval(checkResponse);
+                            sessionStorage.removeItem(responseKey);
                             pendingRequests.delete(requestId);
                             
-                            if (event.data.error) {
-                                reject(new Error(event.data.error));
-                            } else {
-                                // Create a fetch-like response
-                                let responseData = event.data.data;
+                            try {
+                                const response = JSON.parse(responseData);
                                 
-                                // For TTS, convert base64 to blob
-                                if (url.includes('/tts') && responseData.audio) {
-                                    const audioBlob = base64ToBlob(responseData.audio, 'audio/wav');
-                                    const response = new Response(audioBlob, {
-                                        status: 200,
-                                        statusText: 'OK',
-                                        headers: { 'Content-Type': 'audio/wav' }
-                                    });
-                                    resolve(response);
+                                if (response.error) {
+                                    reject(new Error(response.error));
                                 } else {
-                                    const response = new Response(
-                                        JSON.stringify(responseData),
-                                        {
+                                    // Create a fetch-like response
+                                    let data = response.data;
+                                    
+                                    // For TTS, convert base64 to blob
+                                    if (url.includes('/tts') && data && data.audio) {
+                                        const audioBlob = base64ToBlob(data.audio, 'audio/wav');
+                                        const fetchResponse = new Response(audioBlob, {
                                             status: 200,
                                             statusText: 'OK',
-                                            headers: { 'Content-Type': 'application/json' }
-                                        }
-                                    );
-                                    resolve(response);
+                                            headers: { 'Content-Type': 'audio/wav' }
+                                        });
+                                        resolve(fetchResponse);
+                                    } else {
+                                        const fetchResponse = new Response(
+                                            JSON.stringify(data),
+                                            {
+                                                status: 200,
+                                                statusText: 'OK',
+                                                headers: { 'Content-Type': 'application/json' }
+                                            }
+                                        );
+                                        resolve(fetchResponse);
+                                    }
                                 }
+                            } catch (e) {
+                                reject(new Error('Failed to parse response: ' + e.message));
                             }
                         }
-                    };
+                    }, 100); // Check every 100ms
                     
-                    window.addEventListener('message', messageHandler);
-                    
-                    // Timeout après 60 secondes
+                    // Timeout after 60 seconds
                     setTimeout(() => {
-                        window.removeEventListener('message', messageHandler);
-                        pendingRequests.delete(requestId);
-                        reject(new Error('Request timeout'));
+                        clearInterval(checkResponse);
+                        if (pendingRequests.has(requestId)) {
+                            pendingRequests.delete(requestId);
+                            reject(new Error('Request timeout'));
+                        }
                     }, 60000);
                 });
             }
@@ -269,11 +294,140 @@ def handle_tts_api(text):
 # Handle API requests via messages from HTML component
 if 'api_requests' not in st.session_state:
     st.session_state.api_requests = {}
+if 'api_responses' not in st.session_state:
+    st.session_state.api_responses = {}
 
 # Create HTML component that can communicate with Streamlit
 html_content = load_html_with_integrated_scripts()
 
 if html_content:
+    # Add a script in the Streamlit page to listen for postMessage and handle API requests
+    message_handler_script = """
+    <script>
+    (function() {
+        console.log('Streamlit API handler loaded');
+        
+        // Listen for messages from the HTML component
+        window.addEventListener('message', async function(event) {
+            // Only process messages from our component
+            if (event.data && event.data.type === 'api_request') {
+                console.log('API request received:', event.data);
+                
+                const requestId = event.data.requestId;
+                const url = event.data.url;
+                let result = null;
+                let error = null;
+                
+                try {
+                    // Send request to Streamlit backend via a hidden mechanism
+                    // Since we can't directly call Python from JS, we'll use a workaround
+                    // Store request in a way Streamlit can access it
+                    
+                    // Create a custom event that Streamlit can catch
+                    const requestEvent = new CustomEvent('streamlit_api_request', {
+                        detail: event.data
+                    });
+                    document.dispatchEvent(requestEvent);
+                    
+                    // For now, we'll need to use a different approach
+                    // Let's use query parameters as a bridge
+                    const params = new URLSearchParams(window.location.search);
+                    params.set('_api_req', JSON.stringify({
+                        requestId: requestId,
+                        url: url,
+                        fileData: event.data.fileData,
+                        expectedText: event.data.expectedText,
+                        text: event.data.text
+                    }));
+                    
+                    // This will trigger a page reload, but we need a better solution
+                    // For now, let's log the request
+                    console.log('Storing API request:', requestId);
+                    
+                } catch (e) {
+                    console.error('Error handling API request:', e);
+                    error = e.message;
+                }
+            }
+        });
+    })();
+    </script>
+    """
+    
+    # Inject the message handler script into the page
+    st.markdown(message_handler_script, unsafe_allow_html=True)
+    
+    # Check for API requests via query parameters (workaround)
+    query_params = st.query_params
+    
+    if '_api_req' in query_params:
+        try:
+            request_data = json.loads(query_params['_api_req'][0])
+            request_id = request_data.get('requestId')
+            url = request_data.get('url', '')
+            
+            st.session_state.api_requests[request_id] = request_data
+            
+            # Process the request
+            result = None
+            error = None
+            
+            try:
+                if '/pronunciation' in url:
+                    if 'fileData' in request_data and 'expectedText' in request_data:
+                        result = handle_pronunciation_api(
+                            request_data['fileData'],
+                            request_data['expectedText']
+                        )
+                elif '/speech2text' in url:
+                    if 'fileData' in request_data:
+                        result = handle_speech2text_api(request_data['fileData'])
+                elif '/phonemes' in url:
+                    if 'text' in request_data:
+                        result = handle_phonemes_api(request_data['text'])
+                elif '/tts' in url:
+                    if 'text' in request_data:
+                        result = handle_tts_api(request_data['text'])
+            except Exception as e:
+                error = str(e)
+                st.error(f"API Error: {error}")
+                import traceback
+                st.code(traceback.format_exc())
+            
+            # Store response
+            st.session_state.api_responses[request_id] = {
+                'data': result,
+                'error': error
+            }
+            
+            # Store response in sessionStorage for JavaScript to pick up
+            response_data = {
+                'data': result,
+                'error': error
+            }
+            response_script = f"""
+            <script>
+            (function() {{
+                // Store response in sessionStorage for the component to read
+                const responseKey = 'api_response_{request_id}';
+                sessionStorage.setItem(responseKey, JSON.stringify({json.dumps(response_data)}));
+                console.log('Response stored:', '{request_id}');
+                
+                // Remove the query parameter to avoid reprocessing
+                const params = new URLSearchParams(window.location.search);
+                params.delete('_api_req');
+                const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+                window.history.replaceState({{}}, '', newUrl);
+            }})();
+            </script>
+            """
+            st.markdown(response_script, unsafe_allow_html=True)
+            
+        except Exception as e:
+            st.error(f"Error processing API request: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
+    
     # Create HTML component
     components.html(
         html_content,
@@ -281,12 +435,20 @@ if html_content:
         scrolling=True
     )
     
-    # Process pending API requests
-    # Note: Streamlit doesn't directly support bidirectional callbacks
-    # We'll use an approach with query parameters or session_state
-    
-    # For now, just display the component
-    # API calls will be handled via a polling or refresh system
+    # Display debug info in sidebar
+    with st.sidebar:
+        if st.checkbox("🔍 Show Debug Info"):
+            st.markdown("### API Requests")
+            if st.session_state.api_requests:
+                st.json(st.session_state.api_requests)
+            else:
+                st.info("No API requests yet")
+            
+            st.markdown("### API Responses")
+            if st.session_state.api_responses:
+                st.json(st.session_state.api_responses)
+            else:
+                st.info("No API responses yet")
 else:
     st.error("Unable to load HTML template")
 
