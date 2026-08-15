@@ -1,16 +1,13 @@
 name: Publish to PyPI
 
-# Runs when a v* tag is pushed, or when called by the Release workflow.
-# Uses PyPI trusted publishing (pypi.org > project > Publishing: owner Halleck45,
-# repository OpenPronounce, workflow publish.yml, environment pypi).
+# Runs when a v* tag is pushed, or when dispatched on a tag by the Release workflow
+# (PyPI trusted publishing does not support reusable workflows, so this must be the
+# top-level workflow). Trusted publisher on pypi.org: owner Halleck45, repository
+# OpenPronounce, workflow publish.yml, environment pypi.
 on:
   push:
     tags: ["v*"]
-  workflow_call:
-    inputs:
-      tag:
-        required: true
-        type: string
+  workflow_dispatch:
 
 jobs:
   build:
@@ -18,14 +15,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ github.ref }}
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Check that the tag matches pyproject version
+      - name: Check that the ref is a tag matching pyproject version
         env:
-          TAG: ${{ inputs.tag || github.ref_name }}
+          TAG: ${{ github.ref_name }}
         run: |
+          test "${{ github.ref_type }}" = "tag" || { echo "must run on a tag, not $TAG"; exit 1; }
           version=$(python -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
           test "v$version" = "$TAG" || { echo "tag $TAG != v$version"; exit 1; }
       - run: pip install build && python -m build
@@ -59,6 +57,6 @@ jobs:
           path: dist/
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ inputs.tag || github.ref_name }}
+          tag_name: ${{ github.ref_name }}
           files: dist/*
           generate_release_notes: true

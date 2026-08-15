@@ -2,7 +2,7 @@ name: Release
 
 # Manual: Actions > Release > Run workflow, version "vX.Y.Z" (or: gh workflow run release.yml -f version=vX.Y.Z).
 # Bumps the version in pyproject.toml and openpronounce/__init__.py, commits, tags,
-# then publishes to PyPI and creates the GitHub Release (publish.yml).
+# then dispatches publish.yml on the tag (PyPI upload + GitHub Release).
 on:
   workflow_dispatch:
     inputs:
@@ -68,10 +68,11 @@ jobs:
 
   publish:
     needs: tag
-    uses: ./.github/workflows/publish.yml
-    with:
-      tag: ${{ needs.tag.outputs.tag }}
+    runs-on: ubuntu-latest
     permissions:
-      contents: write
-      id-token: write
-    secrets: inherit
+      actions: write
+    steps:
+      # A push made with GITHUB_TOKEN does not trigger publish.yml, so dispatch it on the tag.
+      - run: gh workflow run publish.yml --repo "$GITHUB_REPOSITORY" --ref "${{ needs.tag.outputs.tag }}"
+        env:
+          GH_TOKEN: ${{ github.token }}
