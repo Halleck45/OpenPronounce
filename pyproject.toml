@@ -47,7 +47,6 @@ app = [
     "uvicorn[standard]>=0.23",
     "python-multipart>=0.0.6",
     "jinja2>=3.1",
-    "streamlit>=1.30",
 ]
 tts-piper = [
     "piper-tts>=1.3",

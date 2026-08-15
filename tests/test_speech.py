@@ -112,6 +112,12 @@ class TestTranscriptionComparison(unittest.TestCase):
         self.assertEqual(error["actual_word"], "wild")
         self.assertNotEqual(error["expected"], error["actual"])
 
+    def test_inserted_words_are_attached_to_the_previous_word(self):
+        result = speech.compare_transcriptions("hell no who are you", "hello how are you")
+        by_word = {e["word"]: e for e in result["errors"]}
+        self.assertEqual(by_word["hello"]["actual_word"], "hell no")
+        self.assertEqual(by_word["how"]["actual_word"], "who")
+
     def test_error_rates_are_normalised(self):
         result = speech.compare_transcriptions("", "hello world")
         self.assertEqual(result["word_error_rate"], 1.0)

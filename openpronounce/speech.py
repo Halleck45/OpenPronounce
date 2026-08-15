@@ -178,8 +178,13 @@ def _align_phoneme_indices(expected_phonemes, transcribed_phonemes):
                     alignment_map[k].add(min(start_j, j2 - 1))
                 else:
                     alignment_map[k].update(range(start_j, end_j))
-        # "delete" (missing expected phonemes) and "insert" (extra transcribed phonemes)
-        # produce no mapping.
+        elif tag == "insert":
+            # Extra transcribed words ("hell no" for "hello") are attached to the
+            # previous expected word so the feedback shows everything that was heard.
+            k = i1 - 1 if i1 > 0 else i1
+            if k < len(alignment_map):
+                alignment_map[k].update(range(j1, j2))
+        # "delete" (missing expected phonemes) produces no mapping.
 
     return alignment_map
 

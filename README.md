@@ -120,12 +120,6 @@ An unknown `lang` is rejected with a 422 listing the supported codes.
 
 Interactive docs at `/docs` (Swagger UI).
 
-### Streamlit
-
-```bash
-streamlit run streamlit_app.py
-```
-
 ### Notebook
 
 [Open in Colab](https://colab.research.google.com/github/Halleck45/OpenPronounce/blob/main/OpenPronounce-demo.ipynb): load a sample, score it, print the phoneme errors, plot the prosody, then try your own recording. No local setup.

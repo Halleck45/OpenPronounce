@@ -1,2 +1,2 @@
-# Kept for Streamlit Community Cloud and Colab. For development use: pip install -e ".[app,dev]"
+# Kept for Colab and simple deployments. For development use: pip install -e ".[app,dev]"
 -e .[app]

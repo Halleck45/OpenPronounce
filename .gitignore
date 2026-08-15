@@ -13,3 +13,4 @@ reference.wav
 test_env
 .env
 .env.*
+.claude/
