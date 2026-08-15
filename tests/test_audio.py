@@ -1,4 +1,6 @@
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -37,6 +39,16 @@ class TestLoad(unittest.TestCase):
         waveform, sr = sf.read(out)
         self.assertEqual(sr, audio.TARGET_SR)
         self.assertEqual(waveform.ndim, 1)
+
+    @unittest.skipUnless(shutil.which("ffmpeg"), "ffmpeg not installed")
+    def test_load_browser_webm_opus_through_ffmpeg(self):
+        webm = os.path.join(self.tmp.name, "rec.webm")
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", self.path, "-c:a", "libopus", webm], check=True)
+        waveform = audio.load(webm)
+        self.assertEqual(waveform.dtype, np.float32)
+        self.assertAlmostEqual(len(waveform) / audio.TARGET_SR, 0.5, places=1)
+        out = audio.webm2wav(webm)
+        self.assertTrue(out.endswith("rec.16k.wav"))
 
     def test_webm2wav_unreadable_file(self):
         bad = os.path.join(self.tmp.name, "bad.webm")

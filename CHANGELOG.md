@@ -3,6 +3,8 @@
 ## 0.3.0 (unreleased)
 
 - Added: multi-language support (fr, es, de, it, pt, nl), `lang` parameter everywhere (`--lang` on the CLI, `lang` form field on the API), `GET /languages`. English stays the default and behaves as before.
+- Changed: web demo redesigned (single column, language selector, word chips with per-phone highlighting and confidence, collapsed charts, clear error and loading states).
+- Fixed: browser recordings (webm/opus) could not be decoded since librosa 1.0 dropped audioread; ffmpeg is now used directly as a fallback decoder.
 - Removed: the Streamlit app (`streamlit_app.py`), whose bridge between the embedded UI and Streamlit never worked; use the FastAPI app or the Docker image.
 - Fixed: in the transcription-based fallback, extra words heard inside a word ("hell no" for "hello") are now shown in `actual_word` (#6).
 - Added: CUDA support (`OPENPRONOUNCE_DEVICE`, automatic when available) and `Dockerfile.gpu`.

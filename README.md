@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <img src="./docs/open-pronounce-preview.png" alt="OpenPronounce web application: score, mispronounced words, phoneme and prosody charts" width="720">
+  <img src="./docs/demo.gif" alt="OpenPronounce web demo: record a sentence, get a score, see which sounds went wrong" width="720">
 </p>
 
 ```console

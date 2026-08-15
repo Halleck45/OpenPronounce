@@ -3,9 +3,12 @@
 import hashlib
 import logging
 import os
+import shutil
+import subprocess
 import tempfile
 
 import librosa
+import numpy as np
 import soundfile as sf
 
 from openpronounce import tts
@@ -20,25 +23,45 @@ CACHE_DIR = os.environ.get(
 )
 
 
+def _decode_with_ffmpeg(file_path, sr):
+    """Decode any container/codec ffmpeg knows (webm/opus, m4a, ...) to a mono float32 waveform."""
+    ffmpeg = shutil.which("ffmpeg")
+    if ffmpeg is None:
+        raise RuntimeError("ffmpeg is not installed")
+    result = subprocess.run(
+        [ffmpeg, "-v", "error", "-i", file_path, "-f", "f32le", "-acodec", "pcm_f32le", "-ac", "1", "-ar", str(sr), "-"],
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.decode("utf-8", "replace").strip() or f"ffmpeg failed on {file_path!r}")
+    return np.frombuffer(result.stdout, dtype=np.float32).copy()
+
+
 def load(file_path, sr=TARGET_SR):
-    """Load any audio file (wav, mp3, flac, ogg, webm, m4a...) as a mono float32 waveform at 16 kHz."""
-    waveform, _ = librosa.load(file_path, sr=sr, mono=True)
-    return waveform
+    """Load any audio file (wav, mp3, flac, ogg, webm, m4a...) as a mono float32 waveform at ``sr`` Hz.
+
+    libsndfile (through librosa) handles wav/flac/ogg/mp3; anything it cannot open
+    (browser webm/opus recordings, m4a...) is decoded with ffmpeg.
+    """
+    try:
+        waveform, _ = librosa.load(file_path, sr=sr, mono=True)
+        return waveform
+    except Exception as e:  # noqa: BLE001 - libsndfile cannot read this format, try ffmpeg
+        libsndfile_error = e
+    try:
+        return _decode_with_ffmpeg(file_path, sr)
+    except Exception as e:  # noqa: BLE001
+        raise RuntimeError(
+            f"Unable to decode {file_path!r} (libsndfile: {libsndfile_error}; ffmpeg: {e}). "
+            "Make sure ffmpeg is installed."
+        ) from e
 
 
 def webm2wav(file_path):
-    """Convert a browser-recorded file (webm/ogg/wav/...) to a 16 kHz mono ``*.16k.wav`` file next to it.
-
-    Uses librosa (soundfile, then ffmpeg through audioread) so that ffmpeg is only
-    needed for formats libsndfile cannot read.
-    """
+    """Convert a browser-recorded file (webm/ogg/wav/...) to a 16 kHz mono ``*.16k.wav`` file next to it."""
     output_path = os.path.splitext(file_path)[0] + ".16k.wav"
-    try:
-        waveform = load(file_path)
-    except Exception as e:  # noqa: BLE001
-        raise RuntimeError(
-            f"Unable to decode {file_path!r} ({e}). Make sure ffmpeg is installed."
-        ) from e
+    waveform = load(file_path)
     sf.write(output_path, waveform, TARGET_SR)
     return output_path
 
