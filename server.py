@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from openpronounce import audio, speech
+from openpronounce import __version__, audio, speech
 
 logger = logging.getLogger("openpronounce.server")
 
@@ -21,7 +21,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = FastAPI(
     title="OpenPronounce",
     description="Phoneme-level English pronunciation assessment (Wav2Vec2 + DTW).",
-    version="0.2.0",
+    version=__version__,
 )
 app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))

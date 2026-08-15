@@ -1,6 +1,12 @@
 # Changelog
 
-## 0.2.0 (unreleased)
+## 0.2.1 (2026-08-15)
+
+- Install from PyPI in the docs and the notebook.
+- Release workflow (`Release` action, `vX.Y.Z` input) that bumps, tags, publishes to PyPI and creates the GitHub Release.
+- Fix test discovery on CI (`pythonpath`).
+
+## 0.2.0 (2026-08-15)
 
 ### Breaking
 

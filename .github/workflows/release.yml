@@ -1,0 +1,77 @@
+name: Release
+
+# Manual: Actions > Release > Run workflow, version "vX.Y.Z" (or: gh workflow run release.yml -f version=vX.Y.Z).
+# Bumps the version in pyproject.toml and openpronounce/__init__.py, commits, tags,
+# then publishes to PyPI and creates the GitHub Release (publish.yml).
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, e.g. v0.3.0"
+        required: true
+        type: string
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.check.outputs.tag }}
+    steps:
+      - name: Validate version format
+        id: check
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::version must look like vX.Y.Z (got '$VERSION')"; exit 1
+          fi
+          echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check the tag does not exist and the version is newer
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
+            echo "::error::tag $VERSION already exists"; exit 1
+          fi
+          current=$(python3 -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          newest=$(printf '%s\n%s\n' "$current" "${VERSION#v}" | sort -V | tail -1)
+          if [ "$newest" != "${VERSION#v}" ] || [ "$current" = "${VERSION#v}" ]; then
+            echo "::error::$VERSION is not newer than current version $current"; exit 1
+          fi
+
+      - name: Bump version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          v="${VERSION#v}"
+          sed -i "s/^version = \".*\"/version = \"$v\"/" pyproject.toml
+          sed -i "s/^__version__ = \".*\"/__version__ = \"$v\"/" openpronounce/__init__.py
+          git diff --stat
+
+      - name: Commit and tag
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore: release $VERSION"
+          git tag -a "$VERSION" -m "$VERSION"
+          git push origin HEAD:main
+          git push origin "$VERSION"
+
+  publish:
+    needs: tag
+    uses: ./.github/workflows/publish.yml
+    with:
+      tag: ${{ needs.tag.outputs.tag }}
+    permissions:
+      contents: write
+      id-token: write
+    secrets: inherit
