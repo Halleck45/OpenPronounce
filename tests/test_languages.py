@@ -127,3 +127,17 @@ class TestServerLanguages(unittest.TestCase):
         response = self.client.post("/phonemes", data={"text": "bonjour", "lang": "xx"})
         self.assertEqual(response.status_code, 422)
         self.assertIn("fr", response.json()["detail"])
+
+
+class TestAcousticCalibration(unittest.TestCase):
+
+    def test_every_language_has_a_baseline_at_least_english(self):
+        from openpronounce.languages import LANGUAGES
+        for language in LANGUAGES.values():
+            self.assertGreaterEqual(language.acoustic_good, LANGUAGES["en"].acoustic_good)
+
+    def test_score_uses_the_language_baseline(self):
+        from openpronounce import speech
+        # Two native French voices sit at ~9: full acoustic marks in French, not in English
+        self.assertEqual(speech.compute_pronunciation_score(9.0, 0, 0, lang="fr"), 100.0)
+        self.assertLess(speech.compute_pronunciation_score(9.0, 0, 0, lang="en"), 100.0)

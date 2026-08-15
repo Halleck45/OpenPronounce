@@ -138,7 +138,7 @@ The approach is described in [this blog post](https://blog.lepine.pro/en/ai-wav2
 ### The score
 
 `score = 0.3 × acoustic + 0.4 × (1 − phoneme error rate) + 0.3 × (1 − word error rate)`, each term clipped to [0, 100].
-The acoustic term maps the mean DTW distance linearly from 6 (100) to 15 (0); the bounds are exposed as `speech.ACOUSTIC_DISTANCE_GOOD` / `speech.ACOUSTIC_DISTANCE_BAD` and the weights as `speech.SCORE_WEIGHTS` if you want to recalibrate on your own data. All three terms are length-independent, so a long paragraph and a two-word sentence are scored on the same scale.
+The acoustic term maps the mean DTW distance linearly from 6 (100) to 15 (0) in English; the bounds are exposed as `speech.ACOUSTIC_DISTANCE_GOOD` / `speech.ACOUSTIC_DISTANCE_BAD` and the weights as `speech.SCORE_WEIGHTS` if you want to recalibrate on your own data. All three terms are length-independent, so a long paragraph and a two-word sentence are scored on the same scale. The embeddings come from an English checkpoint, which puts two native voices of another language further apart (9 to 13 instead of ~6.5), so each language carries its own "good" distance (`Language.acoustic_good`, measured between gTTS and Piper voices); the 9-point good-to-bad span is shared.
 
 Weights and bounds were calibrated against human ratings: Spearman ρ = 0.65 with the expert total score on 500 speechocean762 utterances (0.83 once averaged per speaker), see [benchmarks/](benchmarks/README.md). A heavier acoustic weight would correlate a little better on that corpus (0.68) but would no longer punish a wrong sentence, so the phone and word terms keep most of the weight: a learner who says the wrong word must lose points.
 

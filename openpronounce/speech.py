@@ -318,6 +318,10 @@ def align_sequences_dtw(seq1, seq2):
 # speechocean762 the median is 11.5 (9.3 to 13.6 for the middle half).
 ACOUSTIC_DISTANCE_GOOD = 6.0
 ACOUSTIC_DISTANCE_BAD = 15.0
+# The English embeddings put two native voices of another language further apart
+# (9-13 instead of ~6.5), so each language carries its own "good" distance
+# (``Language.acoustic_good``); the good-to-bad span stays the same.
+ACOUSTIC_DISTANCE_SPAN = ACOUSTIC_DISTANCE_BAD - ACOUSTIC_DISTANCE_GOOD
 
 # Calibrated on 500 speechocean762 utterances (see benchmarks/README.md): Spearman 0.65
 # with the human total score. Heavier acoustic weights correlate slightly better (0.68
@@ -326,18 +330,19 @@ ACOUSTIC_DISTANCE_BAD = 15.0
 SCORE_WEIGHTS = {"acoustic": 0.3, "phonemes": 0.4, "words": 0.3}
 
 
-def compute_pronunciation_score(acoustic_distance, phoneme_error_rate, word_error_rate):
+def compute_pronunciation_score(acoustic_distance, phoneme_error_rate, word_error_rate, lang=DEFAULT_LANGUAGE):
     """Combine length-independent measures into a 0-100 score.
 
-    - ``acoustic_distance``: mean per-step DTW distance between Wav2Vec2 embeddings
-      (see :data:`ACOUSTIC_DISTANCE_GOOD` / :data:`ACOUSTIC_DISTANCE_BAD`), 30%.
+    - ``acoustic_distance``: mean per-step DTW distance between Wav2Vec2 embeddings,
+      mapped linearly from ``Language.acoustic_good`` (100) to ``acoustic_good +``
+      :data:`ACOUSTIC_DISTANCE_SPAN` (0); for English that is 6 to 15. 30%.
     - ``phoneme_error_rate``: edited phonemes / expected phonemes, 40%.
     - ``word_error_rate``: edited words / expected words, 30%.
 
     Every component is clipped to [0, 100] before weighting.
     """
-    span = ACOUSTIC_DISTANCE_BAD - ACOUSTIC_DISTANCE_GOOD
-    acoustic_score = 100 * (1 - (acoustic_distance - ACOUSTIC_DISTANCE_GOOD) / span)
+    good = get_language(lang).acoustic_good
+    acoustic_score = 100 * (1 - (acoustic_distance - good) / ACOUSTIC_DISTANCE_SPAN)
     phoneme_score = 100 * (1 - phoneme_error_rate)
     word_score = 100 * (1 - word_error_rate)
 
@@ -397,7 +402,7 @@ def compare_audio_with_text(audio_1, text_reference, sampling_rate=SAMPLING_RATE
         })
 
     score = compute_pronunciation_score(
-        acoustic_distance, differences["phoneme_error_rate"], differences["word_error_rate"]
+        acoustic_distance, differences["phoneme_error_rate"], differences["word_error_rate"], lang
     )
 
     energy = extract_energy(audio_1)
