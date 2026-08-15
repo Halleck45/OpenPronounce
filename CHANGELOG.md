@@ -3,6 +3,9 @@
 ## 0.3.0 (unreleased)
 
 - Added: multi-language support (fr, es, de, it, pt, nl), `lang` parameter everywhere (`--lang` on the CLI, `lang` form field on the API), `GET /languages`. English stays the default and behaves as before.
+- Added: CUDA support (`OPENPRONOUNCE_DEVICE`, automatic when available) and `Dockerfile.gpu`.
+- Fixed: sentences that espeak merges into one token ("would have to") lost all expected phones, so no word could be flagged and the phone error rate exploded (17 % of speechocean762 utterances).
+- Added: `benchmarks/speechocean762.py`, benchmark of the score against human ratings.
 - Added: offline TTS backends (Piper, Kokoro), `OPENPRONOUNCE_TTS` env var, `OPENPRONOUNCE_TTS_VOICE` / `voice=` to pick the voice. `pip install openpronounce[tts-piper]` or `[tts-kokoro]`.
 
 ## 0.2.1 (2026-08-15)

@@ -74,3 +74,16 @@ class TestComparePhones(unittest.TestCase):
 
     def test_serialisable(self):
         json.dumps(phones.compare_phones(self.heard("hello"), "hello world"))
+
+
+class TestPhonemizerFallback(unittest.TestCase):
+
+    def test_words_merged_by_espeak_still_get_phones(self):
+        # espeak phonemizes "would have to" as a single token; the per-word fallback must kick in.
+        words, groups = phones.get_expected_phones("would have to")
+        self.assertEqual(words, ["would", "have", "to"])
+        self.assertTrue(all(len(g) > 0 for g in groups), groups)
+
+    def test_phone_error_rate_without_expected_phones(self):
+        self.assertEqual(phones.compare_phones(["a"], "")["phone_error_rate"], 1.0)
+        self.assertEqual(phones.compare_phones([], "")["phone_error_rate"], 0.0)

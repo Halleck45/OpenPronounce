@@ -14,6 +14,7 @@ from scipy.spatial.distance import euclidean
 from sklearn.preprocessing import MinMaxScaler
 
 from . import audio, phones
+from .device import get_device
 from .languages import DEFAULT_LANGUAGE, get_language
 
 logger = logging.getLogger(__name__)
@@ -41,7 +42,7 @@ def _load_models(model_name=MODEL_NAME):
 
     logger.info("Loading %s", model_name)
     processor = Wav2Vec2Processor.from_pretrained(model_name)
-    model_ctc = Wav2Vec2ForCTC.from_pretrained(model_name)
+    model_ctc = Wav2Vec2ForCTC.from_pretrained(model_name).to(get_device())
     model_ctc.eval()
     return processor, model_ctc
 
@@ -71,9 +72,9 @@ def extract_embeddings(audio_waveform, sampling_rate=SAMPLING_RATE):
         input_values = input_values.squeeze(0)
 
     with torch.no_grad():
-        features = _get_model()(input_values).last_hidden_state  # (batch, time, features)
+        features = _get_model()(input_values.to(get_device())).last_hidden_state  # (batch, time, features)
 
-    return features.squeeze(0).numpy()
+    return features.squeeze(0).cpu().numpy()
 
 
 def transcribe(audio_waveform, lang=DEFAULT_LANGUAGE):
@@ -84,8 +85,8 @@ def transcribe(audio_waveform, lang=DEFAULT_LANGUAGE):
     processor = _get_processor(lang)
     inputs = processor(audio_waveform, sampling_rate=SAMPLING_RATE, return_tensors="pt", padding=True)
     with torch.no_grad():
-        logits = _get_model_ctc(lang)(inputs.input_values).logits
-    predicted_ids = torch.argmax(logits, dim=-1)
+        logits = _get_model_ctc(lang)(inputs.input_values.to(get_device())).logits
+    predicted_ids = torch.argmax(logits, dim=-1).cpu()
     return processor.batch_decode(predicted_ids)[0]
 
 

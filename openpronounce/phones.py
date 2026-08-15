@@ -16,6 +16,8 @@ import torch
 from phonemizer import phonemize
 from phonemizer.separator import Separator
 
+from .device import get_device
+
 from .languages import DEFAULT_LANGUAGE, get_language
 
 logger = logging.getLogger(__name__)
@@ -84,7 +86,7 @@ def _load_model():
 
     logger.info("Loading %s", PHONE_MODEL_NAME)
     processor = Wav2Vec2Processor.from_pretrained(PHONE_MODEL_NAME)
-    model = Wav2Vec2ForCTC.from_pretrained(PHONE_MODEL_NAME)
+    model = Wav2Vec2ForCTC.from_pretrained(PHONE_MODEL_NAME).to(get_device())
     model.eval()
     return processor, model
 
@@ -113,8 +115,8 @@ def transcribe_phones(audio_waveform, sampling_rate=SAMPLING_RATE, normalize=Tru
     processor, model = _load_model()
     inputs = processor(audio_waveform, sampling_rate=sampling_rate, return_tensors="pt", padding=True)
     with torch.no_grad():
-        logits = model(inputs.input_values).logits
-    predicted_ids = torch.argmax(logits, dim=-1)
+        logits = model(inputs.input_values.to(get_device())).logits
+    predicted_ids = torch.argmax(logits, dim=-1).cpu()
     phones = processor.batch_decode(predicted_ids)[0].split()
     return normalize_phones(phones, lang) if normalize else phones
 
@@ -147,7 +149,8 @@ def _expected_phones_by_word(text, lang=DEFAULT_LANGUAGE):
         for word in words:
             try:
                 out = phonemize(word, language=language, backend="espeak", strip=True,
-                                separator=Separator(phone=" ", word=" ", syllable=""))
+                                preserve_punctuation=False,
+                                separator=Separator(phone=" ", word="", syllable=""))
                 groups.append(out.split())
             except Exception:  # noqa: BLE001
                 groups.append([])
@@ -208,7 +211,10 @@ def compare_phones(heard_phones, text_reference, lang=DEFAULT_LANGUAGE):
     heard = list(heard_phones)
 
     alignment = _align(expected, heard)
-    phone_error_rate = Levenshtein.distance(expected, heard) / max(1, len(expected))
+    if expected:
+        phone_error_rate = Levenshtein.distance(expected, heard) / len(expected)
+    else:
+        phone_error_rate = 1.0 if heard else 0.0
 
     errors = []
     words_with_errors = []

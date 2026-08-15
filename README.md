@@ -95,6 +95,8 @@ docker run -p 8000:8000 openpronounce
 # open http://localhost:8000
 ```
 
+GPU (needs the NVIDIA Container Toolkit): `docker build -f Dockerfile.gpu -t openpronounce:gpu . && docker run --gpus all -p 8000:8000 openpronounce:gpu`. Outside Docker, models run on CUDA when `torch.cuda.is_available()`; force a device with `OPENPRONOUNCE_DEVICE=cpu|cuda|cuda:1|mps`.
+
 ### Web application (FastAPI)
 
 ```bash
@@ -185,7 +187,7 @@ Contributions welcome on any of these:
 - [ ] Per-phone confidence (CTC posteriors) to grade errors instead of a yes/no per word
 - [x] Other languages (fr, es, de, it, pt, nl, experimental)
 - [ ] Benchmark on a public L2 dataset (speechocean762) to calibrate the score
-- [ ] GPU support in the Docker image
+- [x] GPU support (`Dockerfile.gpu`, `OPENPRONOUNCE_DEVICE`)
 
 ## Contributing
 

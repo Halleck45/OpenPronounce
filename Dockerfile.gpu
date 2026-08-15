@@ -1,0 +1,38 @@
+# OpenPronounce web app (FastAPI + UI), CUDA build.
+#
+#   docker build -f Dockerfile.gpu -t openpronounce:gpu .
+#   docker run --gpus all -p 8000:8000 openpronounce:gpu
+#
+# Requires the NVIDIA Container Toolkit on the host. Models are downloaded at build
+# time; inference runs on the GPU when one is visible (OPENPRONOUNCE_DEVICE=cpu to force CPU).
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    HF_HOME=/models \
+    PORT=8000 \
+    DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 python3-pip python3-venv ffmpeg espeak-ng libsndfile1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /usr/bin/python3 /usr/local/bin/python
+
+WORKDIR /app
+
+RUN pip install torch --index-url https://download.pytorch.org/whl/cu124
+
+COPY pyproject.toml README.md ./
+COPY openpronounce ./openpronounce
+RUN pip install ".[app]"
+
+RUN python -c "from openpronounce.speech import _load_models; _load_models()" \
+    && python -c "from openpronounce.phones import _load_model; _load_model()"
+
+COPY server.py ./
+COPY templates ./templates
+COPY static ./static
+
+EXPOSE 8000
+CMD uvicorn server:app --host 0.0.0.0 --port ${PORT}
