@@ -235,8 +235,8 @@ class TestIntegration(unittest.TestCase):
         self.assertEqual(result["differences"]["errors"], [])
         self.assertEqual(result["differences"]["heard_phones"], ["h", "ə", "l", "oʊ"])
         self.assertEqual(result["prosody"]["f0"], [100, 110, 120])
-        mock_text2speech.assert_called_with("hello")
-        mock_transcribe.assert_called_with(sample_audio)
+        mock_text2speech.assert_called_with("hello", lang="en")
+        mock_transcribe.assert_called_with(sample_audio, "en")
 
     @patch("openpronounce.speech.interpolate_f0", return_value=np.array([100.0]))
     @patch("openpronounce.speech.extract_f0", return_value=np.array([100.0]))

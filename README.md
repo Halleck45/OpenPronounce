@@ -1,8 +1,8 @@
 <h1 align="center">OpenPronounce</h1>
 
 <p align="center">
-  <b>Open-source, phoneme-level English pronunciation assessment.</b><br>
-  Give it a recording and the sentence that was supposed to be said. Get a score, the mispronounced words with expected vs. heard phonemes (IPA), the transcription and the prosody curves. Runs on your machine, on CPU.
+  <b>Open-source, phoneme-level pronunciation assessment.</b><br>
+  Give it a recording and the sentence that was supposed to be said. Get a score, the mispronounced words with expected vs. heard phonemes (IPA), the transcription and the prosody curves. Runs on your machine, on CPU. English by default; French, Spanish, German, Italian, Portuguese and Dutch are supported experimentally.
 </p>
 
 <p align="center">
@@ -64,6 +64,7 @@ Two Wav2Vec2 checkpoints (~1.2 GB each) are downloaded from the Hugging Face Hub
 ```bash
 openpronounce recording.wav "Hello, I am a developer"
 openpronounce recording.mp3 "Hello, I am a developer" --json --no-prosody   # machine-readable
+openpronounce bonjour.wav "Bonjour, je suis développeur" --lang fr           # other languages, see below
 ```
 
 ### Python
@@ -80,6 +81,11 @@ for err in result["differences"]["errors"]:
 ```
 
 Lower-level building blocks are exposed too: `transcribe(sound)`, `get_phonemes(text)`, `compare_transcriptions(heard_text, expected_text)`.
+Every function takes an optional `lang="en"`; `compare_audio_with_text(sound, "Bonjour le monde", lang="fr")` selects the French TTS voice, phonemizer and word transcription model.
+
+### Languages
+
+English (`en`) is the default and the only calibrated language. `fr`, `es`, `de`, `it`, `pt` and `nl` are experimental: the phone recognizer (`wav2vec2-lv-60-espeak-cv-ft`) is multilingual, but the word transcription models are community XLSR checkpoints (`jonatasgrosman/wav2vec2-large-xlsr-53-*`, ~1.2 GB each, downloaded on first use) and no per-language calibration of the score has been done. `openpronounce.LANGUAGES` lists the registry, `get_language(code)` raises `ValueError` on unknown codes.
 
 ### Docker
 
@@ -101,11 +107,14 @@ The UI records from the microphone, scores the sentence, animates a mouth (visem
 
 | Endpoint | Body (multipart form) | Returns |
 |---|---|---|
-| `POST /pronunciation` | `file`, `expected_text` | full analysis (see above) |
-| `POST /speech2text` | `file` | `{"transcript": ...}` |
-| `POST /phonemes` | `text` | `{"phonemes": [...], "words": [...]}` |
-| `POST /tts` | `text` | reference pronunciation, 16 kHz wav |
+| `POST /pronunciation` | `file`, `expected_text`, `lang` (optional, default `en`) | full analysis (see above) |
+| `POST /speech2text` | `file`, `lang` (optional) | `{"transcript": ...}` |
+| `POST /phonemes` | `text`, `lang` (optional) | `{"phonemes": [...], "words": [...]}` |
+| `POST /tts` | `text`, `lang` (optional) | reference pronunciation, 16 kHz wav |
+| `GET /languages` | | `{"default": "en", "languages": [{"code": ..., "name": ...}]}` |
 | `GET /health` | | `{"status": "ok"}` |
+
+An unknown `lang` is rejected with a 422 listing the supported codes.
 
 Interactive docs at `/docs` (Swagger UI).
 
@@ -122,9 +131,9 @@ streamlit run streamlit_app.py
 ## How it works
 
 1. **Phones**: a Wav2Vec2 model fine-tuned on espeak labels (`wav2vec2-lv-60-espeak-cv-ft`) recognizes the phones actually said, straight from the audio. No word-level language model gets a chance to "correct" the learner.
-2. **Expected phones**: the sentence is phonemized with espeak-ng (IPA), word by word. Both sequences are normalized (length marks dropped, reduced vowels merged, cot-caught merger, a few function words with alternate pronunciations).
+2. **Expected phones**: the sentence is phonemized with espeak-ng (IPA) in the selected language, word by word. Both sequences are normalized (length marks dropped, repetitions collapsed; for English also reduced vowels merged, cot-caught merger, a few function words with alternate pronunciations).
 3. **Alignment**: expected and heard phones are aligned with edit-distance opcodes; each word is compared with the phones it aligned to and reported when half of them (or 3 or more) are wrong. Thresholds: `phones.PHONE_ERROR_THRESHOLD`, `phones.PHONE_ERROR_MIN_EDITS`.
-4. **Words**: the audio is also transcribed with `wav2vec2-large-960h` for the transcription and the word error rate.
+4. **Words**: the audio is also transcribed with `wav2vec2-large-960h` (English) or a language-specific XLSR checkpoint for the transcription and the word error rate.
 5. **Acoustics**: the sentence is synthesized (gTTS), both recordings are encoded with Wav2Vec2 and aligned with DTW; the mean per-frame distance is the `acoustic_distance`.
 6. **Prosody**: F0 (pYIN) and RMS energy contours.
 
@@ -147,7 +156,7 @@ viseme.play(["həloʊ", "huː", "ɑːɹ", "juː"]);
 
 ## Limitations
 
-- English only for now (`en-us` phonemization, English Wav2Vec2). Swapping the model and the espeak language is the path to other languages.
+- Only English is calibrated. Other languages reuse the English thresholds and score weights, the acoustic embeddings always come from the English checkpoint, and their word transcription relies on community XLSR models.
 - The reference voice comes from gTTS, so the first analysis of a given sentence needs network access; references are cached afterwards.
 - Wav2Vec2 was trained on native read speech (LibriSpeech). Very strong accents, children's voices and noisy recordings degrade the transcription, and therefore the feedback.
 - The phone recognizer itself has an error rate (about 10 % of phones on a clean native reading of the bundled Harvard sentences); expect an occasional false alarm on short words. This is a heuristic assessment, not a Goodness-of-Pronunciation model trained on annotated L2 speech.
@@ -160,7 +169,7 @@ Contributions welcome on any of these:
 - [ ] Hosted demo (Docker image is ready, `scripts/sync_space.sh` pushes it to a Hugging Face Space)
 - [ ] Offline TTS reference (piper / Kokoro) instead of gTTS
 - [ ] Per-phone confidence (CTC posteriors) to grade errors instead of a yes/no per word
-- [ ] Other languages
+- [x] Other languages (fr, es, de, it, pt, nl, experimental)
 - [ ] Benchmark on a public L2 dataset (speechocean762) to calibrate the score
 - [ ] GPU support in the Docker image
 
