@@ -4,8 +4,7 @@ import os
 import tempfile
 import base64
 import json
-import speech
-import audio
+from openpronounce import audio, speech
 import random
 import string
 
@@ -234,7 +233,7 @@ def handle_pronunciation_api(file_data_base64, expected_text):
             tmp_path = tmp_file.name
         
         try:
-            wav_file = audio.webp2wav(tmp_path)
+            wav_file = audio.webm2wav(tmp_path)
             sound = audio.load(wav_file)
             result = speech.compare_audio_with_text(sound, expected_text)
             return result
@@ -254,7 +253,7 @@ def handle_speech2text_api(file_data_base64):
             tmp_path = tmp_file.name
         
         try:
-            wav_file = audio.webp2wav(tmp_path)
+            wav_file = audio.webm2wav(tmp_path)
             sound = audio.load(wav_file)
             transcript = speech.transcribe(sound)
             return {"transcript": transcript}

@@ -516,10 +516,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
 // Helper functions for score calculation and display
 function calculateAccuracy(data) {
-    // Accuracy based on phoneme distance (lower distance = higher accuracy)
-    const maxDistance = 5000;
-    const phonemeDistance = data.differences.phoneme_distance || 0;
-    return Math.max(0, Math.round(100 - (phonemeDistance / maxDistance) * 100));
+    // Accuracy = 1 - phoneme error rate (edited phonemes / expected phonemes)
+    const per = data.differences.phoneme_error_rate || 0;
+    return Math.max(0, Math.round(100 * (1 - per)));
 }
 
 function calculateFluency(data) {
@@ -532,10 +531,9 @@ function calculateFluency(data) {
 }
 
 function calculateCompleteness(data) {
-    // Completeness based on word distance (how many words were correctly recognized)
-    const maxWordDistance = 30;
-    const wordDistance = data.differences.word_distance || 0;
-    return Math.max(0, Math.round(100 - (wordDistance / maxWordDistance) * 100));
+    // Completeness = 1 - word error rate (edited words / expected words)
+    const wer = data.differences.word_error_rate || 0;
+    return Math.max(0, Math.round(100 * (1 - wer)));
 }
 
 function calculateProsody(data) {

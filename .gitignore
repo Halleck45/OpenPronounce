@@ -1,4 +1,13 @@
 __pycache__/
-pytorch_model.bin
+*.pyc
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
 reference.mp3
+reference.wav
 test_env

@@ -1,0 +1,37 @@
+# Changelog
+
+## 0.2.0 (unreleased)
+
+### Breaking
+
+- The code now lives in the `openpronounce` package: `from openpronounce import audio, speech`
+  (was `import audio`, `import speech`). Installable with `pip install .` and shipped with an
+  `openpronounce` console script.
+- The score is now computed from length-independent measures (mean per-frame DTW distance,
+  phoneme error rate, word error rate). Scores are not comparable with 0.1.x: previously a
+  perfect reading of a long sentence could score 30/100 because raw DTW distances grow with
+  the audio length.
+- `compute_pronunciation_score(acoustic_distance, phoneme_error_rate, word_error_rate)` takes
+  the normalized measures.
+- `audio.webp2wav` is renamed `audio.webm2wav` (old name kept as an alias) and writes `<name>.16k.wav`.
+
+### Fixed
+
+- Upper-case reference text was phonemized letter by letter by espeak (`IT` -> /aɪtiː/), so
+  every word of an upper-case sentence was flagged as mispronounced.
+- The reference audio was written to a fixed `reference.mp3` in the working directory:
+  concurrent web requests overwrote each other's file. References are now cached per
+  sentence under `$OPENPRONOUNCE_CACHE_DIR` (default: system temp dir).
+- Uploading a `.wav` to the API deleted the converted file before it was read.
+- The test suite referenced functions that did not exist and CI had been red since December 2025.
+
+### Changed
+
+- Models are loaded lazily on first use, and the CTC checkpoint's encoder is reused for
+  embeddings: half the memory and load time, and `import openpronounce` is instantaneous.
+- `torchaudio` (whose `load`/`save` now require torchcodec) and unused dependencies
+  (`coqui-tts`, `dtw-python`, `pydub`, `spacy` download step) are dropped.
+- New fields: `acoustic_distance`, `differences.phoneme_error_rate`, `differences.word_error_rate`,
+  `errors[].actual_word` is always present.
+- Dockerfile, `/health` endpoint, Swagger metadata, CI matrix (3.10 / 3.12).
+- Demo notebook rewritten to install from GitHub and run end to end on Colab.

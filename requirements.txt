@@ -1,21 +1,2 @@
-torch 
-torchaudio 
-transformers 
-librosa 
-dtw-python 
-phonemizer 
-numpy
-fastapi
-python-multipart
-coqui-tts
-pydub
-gtts
-fastdtw
-scipy
-python-Levenshtein
-scikit-learn
-streamlit
-plotly
-requests
-uvicorn
-soundfile
+# Kept for Streamlit Community Cloud and Colab. For development use: pip install -e ".[app,dev]"
+-e .[app]

@@ -1,0 +1,8 @@
+cff-version: 1.2.0
+message: "If you use OpenPronounce in research, please cite it as below."
+title: "OpenPronounce: open-source phoneme-level English pronunciation assessment"
+authors:
+  - family-names: "Lépine"
+    given-names: "Jean-François"
+repository-code: "https://github.com/Halleck45/OpenPronounce"
+license: MIT
