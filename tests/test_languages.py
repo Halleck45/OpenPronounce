@@ -64,7 +64,7 @@ class TestFrenchPhones(unittest.TestCase):
 
 class TestFrenchPipeline(unittest.TestCase):
 
-    @patch("openpronounce.speech.phones.transcribe_phones")
+    @patch("openpronounce.speech.phones.recognize_phones")
     @patch("openpronounce.speech.interpolate_f0", return_value=np.array([100.0]))
     @patch("openpronounce.speech.extract_f0", return_value=np.array([100.0]))
     @patch("openpronounce.speech.extract_energy", return_value=np.array([1.0]))
@@ -73,9 +73,9 @@ class TestFrenchPipeline(unittest.TestCase):
     @patch("openpronounce.speech.audio.text2speech", return_value="ref.wav")
     @patch("openpronounce.speech.extract_embeddings", return_value=np.zeros((10, 4)))
     def test_compare_audio_with_text_french(self, _emb, mock_text2speech, _load, mock_transcribe,
-                                            _energy, _f0, _interp, mock_transcribe_phones):
+                                            _energy, _f0, _interp, mock_recognize_phones):
         _, groups = phones.get_expected_phones("bonjour le monde", lang="fr")
-        mock_transcribe_phones.return_value = [p for g in groups for p in g]
+        mock_recognize_phones.return_value = [p for g in groups for p in g]
         sound = np.zeros(16000, dtype=np.float32)
 
         result = speech.compare_audio_with_text(sound, "Bonjour le monde", lang="fr")
@@ -85,7 +85,7 @@ class TestFrenchPipeline(unittest.TestCase):
         self.assertEqual(result["differences"]["phoneme_error_rate"], 0.0)
         mock_text2speech.assert_called_with("Bonjour le monde", lang="fr")
         mock_transcribe.assert_called_with(sound, "fr")
-        mock_transcribe_phones.assert_called_with(sound, 16000, lang="fr")
+        mock_recognize_phones.assert_called_with(sound, 16000, lang="fr")
 
     def test_unknown_language(self):
         with self.assertRaises(ValueError):

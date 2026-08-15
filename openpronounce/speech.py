@@ -379,14 +379,15 @@ def compare_audio_with_text(audio_1, text_reference, sampling_rate=SAMPLING_RATE
     differences = compare_transcriptions(transcription, text_reference, lang)
 
     if use_phone_model:
-        heard = phones.transcribe_phones(audio_1, sampling_rate, lang=lang)
-        phone_result = phones.compare_phones(heard, text_reference, lang)
+        recognition = phones.recognize_phones(audio_1, sampling_rate, lang=lang)
+        phone_result = phones.compare_phones(recognition, text_reference, lang)
         differences.update({
             "errors": phone_result["errors"],
             "words_with_errors": phone_result["words_with_errors"],
             "phoneme_error_rate": phone_result["phone_error_rate"],
             "expected_phones": phone_result["expected_phones"],
             "heard_phones": phone_result["heard_phones"],
+            "heard_phones_confidence": phone_result["heard_phones_confidence"],
             "feedback": _feedback(phone_result["words_with_errors"]),
         })
 

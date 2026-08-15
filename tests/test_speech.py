@@ -211,7 +211,7 @@ class TestAlignmentFunctions(unittest.TestCase):
 
 class TestIntegration(unittest.TestCase):
 
-    @patch("openpronounce.speech.phones.transcribe_phones")
+    @patch("openpronounce.speech.phones.recognize_phones")
     @patch("openpronounce.speech.interpolate_f0")
     @patch("openpronounce.speech.extract_f0")
     @patch("openpronounce.speech.extract_energy")
@@ -221,8 +221,8 @@ class TestIntegration(unittest.TestCase):
     @patch("openpronounce.speech.extract_embeddings")
     def test_compare_audio_with_text_mocked(self, mock_extract_emb, mock_text2speech, mock_load,
                                             mock_transcribe, mock_extract_energy, mock_extract_f0,
-                                            mock_interp_f0, mock_transcribe_phones):
-        mock_transcribe_phones.return_value = ["h", "ə", "l", "oʊ"]
+                                            mock_interp_f0, mock_recognize_phones):
+        mock_recognize_phones.return_value = ["h", "ə", "l", "oʊ"]
         sample_audio = np.random.randn(16000).astype(np.float32)
         mock_extract_emb.return_value = np.random.randn(20, 8)
         mock_text2speech.return_value = "temp_reference.wav"
