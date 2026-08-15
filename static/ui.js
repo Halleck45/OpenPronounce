@@ -584,24 +584,27 @@ function displayWordDetails(data) {
     // Split by spaces and filter out empty strings, then clean punctuation from each word for display/comparison
     const words = expectedText.match(/\b[\w']+\b/g) || [];
     const errors = data.differences.errors || [];
+    const expectedPhones = data.differences.expected_phones || [];
+    const escape = (text) => String(text).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+
+    // Errors are matched by position when available (duplicate words), by name otherwise
+    const errorsByPosition = new Map(errors.filter(e => typeof e.position === 'number').map(e => [e.position, e]));
 
     words.forEach((word, index) => {
         const wordDetail = template.content.cloneNode(true);
 
-        // Find if this word has an error
-        // Note: Backend now returns "word" field in error which matches the expected word text
-        const error = errors.find(e => e.word === word);
+        const error = errorsByPosition.get(index) || errors.find(e => e.word.toLowerCase() === word.toLowerCase());
 
-        // Calculate word score (100 if no error, lower if error exists)
-        // If error exists, we can use the phoneme distance if available, or just a default penalty
+        // Word score: 100 for a correct word; otherwise driven by how sure we are the word is wrong
         let wordScore = 100;
         if (error) {
             if (error.actual === "") {
                 wordScore = 0; // Missing word
+            } else if (typeof error.confidence === 'number') {
+                wordScore = Math.round(100 * (1 - error.confidence));
             } else {
-                // Mispronunciation
                 const dist = Levenshtein.distance(error.expected, error.actual);
-                wordScore = Math.max(0, 100 - (dist * 20)); // Penalize 20 points per phoneme diff
+                wordScore = Math.max(0, 100 - (dist * 20));
             }
         }
 
@@ -627,43 +630,38 @@ function displayWordDetails(data) {
         bar.style.width = `${wordScore}%`;
         bar.classList.add(error ? 'bg-red-500' : 'bg-green-500');
 
-        // Set phonetic breakdown
+        // Phonetic breakdown: expected phones, the wrong ones highlighted, then what was heard
         const phonemesEl = wordDetail.querySelector('[data-role="word.phonemes"]');
         if (error) {
+            const errorTypeContainer = wordDetail.querySelector('.error-type');
+            const errorTypeEl = errorTypeContainer.querySelector('[data-role="error.type"]');
+            errorTypeContainer.classList.remove('hidden');
+
+            let expectedHtml = escape(error.expected);
+            if (Array.isArray(error.phones) && error.phones.length) {
+                expectedHtml = error.phones.map(p => {
+                    const wrong = typeof p.confidence === 'number' && p.confidence >= 0.5;
+                    const title = wrong ? ` title="heard /${escape(p.heard || '∅')}/"` : '';
+                    return `<span class="${wrong ? 'text-red-600 font-semibold underline decoration-red-400' : ''}"${title}>${escape(p.expected)}</span>`;
+                }).join('');
+            }
+
             if (error.actual === "") {
-                phonemesEl.innerHTML = `/${error.expected}/ <span class="text-red-400">vs (missing)</span>`;
-
-                const errorTypeContainer = wordDetail.querySelector('.error-type');
-                errorTypeContainer.classList.remove('hidden');
-                errorTypeContainer.querySelector('[data-role="error.type"]').textContent = 'Word is missing';
+                phonemesEl.innerHTML = `/${expectedHtml}/ <span class="text-red-400">vs (missing)</span>`;
+                errorTypeEl.textContent = 'Word is missing';
             } else {
-                phonemesEl.innerHTML = `/${error.expected}/ <span class="text-red-400">vs /${error.actual}/</span>`;
-
-                const errorTypeContainer = wordDetail.querySelector('.error-type');
-                errorTypeContainer.classList.remove('hidden');
-                errorTypeContainer.querySelector('[data-role="error.type"]').textContent = 'Mispronunciation';
+                phonemesEl.innerHTML = `/${expectedHtml}/ <span class="text-red-400">vs /${escape(error.actual)}/</span>`;
+                errorTypeEl.textContent = 'Mispronunciation';
                 if (error.actual_word) {
-                    errorTypeContainer.querySelector('[data-role="error.type"]').textContent += ` (Heard: "${error.actual_word}")`;
+                    errorTypeEl.textContent += ` (heard: "${error.actual_word}")`;
+                }
+                if (typeof error.confidence === 'number') {
+                    errorTypeEl.textContent += `, confidence ${Math.round(error.confidence * 100)} %`;
                 }
             }
         } else {
-            // For correct words, just show expected phonemes
-            // We need to find the phonemes for this word. 
-            // Since we don't have a direct map from index -> phonemes here easily without re-parsing,
-            // we can try to use the backend's expected_phonemes if we can map it.
-            // But backend returns flat list.
-            // Simplest: just use phonemizer on frontend? No.
-            // Let's just leave it empty or try to match?
-            // The backend `errors` contains `expected` phonemes for errors.
-            // For correct words, we don't have it in `errors`.
-            // We could pass `words_info` from backend?
-            // For now, let's just show nothing or "OK" for correct words?
-            // Or we can try to guess from `data.differences.expected_phonemes`?
-            // That list is flat.
-            // Let's just show "OK" or check if we can get it.
-            // Actually, the user liked seeing phonemes.
-            // Let's leave it blank for now if we can't easily get it, or use a placeholder.
-            phonemesEl.textContent = "Correct";
+            const phones = expectedPhones[index];
+            phonemesEl.textContent = phones && phones.length ? `/${phones.join('')}/` : 'Correct';
             phonemesEl.classList.add("text-green-500");
         }
 

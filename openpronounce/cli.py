@@ -42,7 +42,8 @@ def main(argv=None):
         print("Mispronounced:")
         for err in errors:
             actual = f"/{err['actual']}/" if err["actual"] else "(missing)"
-            print(f"  - {err['word']}: expected /{err['expected']}/, heard {actual}")
+            confidence = f" (confidence {err['confidence']:.0%})" if "confidence" in err else ""
+            print(f"  - {err['word']}: expected /{err['expected']}/, heard {actual}{confidence}")
     else:
         print("No mispronounced word detected.")
     return 0

@@ -13,7 +13,7 @@ Typical usage::
 
 from .audio import load as load_audio, text2speech
 from .languages import LANGUAGES, get_language
-from .phones import compare_phones, transcribe_phones
+from .phones import compare_phones, recognize_phones, transcribe_phones
 from .speech import (
     compare_audio_with_text,
     compare_transcriptions,
@@ -33,6 +33,7 @@ __all__ = [
     "compare_audio_with_text",
     "compare_transcriptions",
     "compare_phones",
+    "recognize_phones",
     "transcribe_phones",
     "get_phonemes",
     "get_phonemes_with_word_mapping",
