@@ -37,3 +37,13 @@ class TestServer(unittest.TestCase):
         response = self.client.post("/speech2text", files={"file": ("rec.wav", buf, "audio/wav")})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"transcript": "HELLO"})
+
+    def test_ui_assets_and_languages(self):
+        for path in ("/static/ui.js", "/static/audio.js", "/static/viseme.js", "/static/assets/logo.svg"):
+            self.assertEqual(self.client.get(path).status_code, 200, path)
+        home = self.client.get("/").text
+        for element in ("record-btn", "language-select", "expected-text", "word-chips", "score-ring"):
+            self.assertIn(f'id="{element}"', home)
+        languages = self.client.get("/languages").json()
+        self.assertEqual(languages["default"], "en")
+        self.assertIn({"code": "en", "name": "English"}, languages["languages"])

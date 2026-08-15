@@ -1,13 +1,30 @@
+/**
+ * Microphone recorder built on MediaRecorder.
+ *
+ * Emits DOM events on `document`:
+ *   record:start          recording began
+ *   record:stop           recording ended (user, timeout or silence)
+ *   record:silence        recording ended because of silence
+ *   record:ready          detail: { blob }  the webm blob is available
+ *   record:error          detail: { reason } one of "insecure", "denied", "notfound", "unknown"
+ */
 class AudioRecorder {
-    constructor() {
+    constructor({ silenceThreshold = 50, silenceDuration = 2000, maxDuration = 60000 } = {}) {
         this.mediaRecorder = null;
-        this.audioChunks = [];
+        this.stream = null;
         this.audioContext = null;
         this.analyser = null;
+        this.audioChunks = [];
         this.silenceTimer = null;
-        this.silenceThreshold = 50;
-        this.silenceDuration = 2000;
+        this.maxTimer = null;
+        this.silenceThreshold = silenceThreshold;
+        this.silenceDuration = silenceDuration;
+        this.maxDuration = maxDuration;
         this.started = false;
+    }
+
+    static isSupported() {
+        return Boolean(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
     }
 
     async start() {
@@ -16,47 +33,58 @@ class AudioRecorder {
             return;
         }
 
-        try {
-            // 🔴 Demande l'accès au micro seulement ici, et non plus au chargement de la page
-            this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            this.audioContext = new AudioContext();
-            const source = this.audioContext.createMediaStreamSource(this.stream);
-            this.analyser = this.audioContext.createAnalyser();
-            this.analyser.fftSize = 256;
-            source.connect(this.analyser);
-            this.mediaRecorder = new MediaRecorder(this.stream);
-
-            this.mediaRecorder.ondataavailable = event => {
-                this.audioChunks.push(event.data);
-            };
-
-            this.mediaRecorder.onstop = () => this.processAudio();
-
-            this.started = true;
-            this.audioChunks = [];
-
-            this.mediaRecorder.start();
-            requestAnimationFrame(() => this.checkSilence());
-
-            document.dispatchEvent(new Event('record:start'));
-
-            setTimeout(() => this.stop(), 60000);
-        } catch (err) {
-            console.error("Erreur d'accès au micro: ", err);
+        if (!AudioRecorder.isSupported()) {
+            this.emit('record:error', { reason: window.isSecureContext ? 'unknown' : 'insecure' });
+            return;
         }
+
+        try {
+            // Ask for the microphone only now, never on page load
+            this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch (err) {
+            const name = err && err.name;
+            const reason = (name === 'NotAllowedError' || name === 'SecurityError') ? 'denied'
+                : (name === 'NotFoundError' || name === 'OverconstrainedError') ? 'notfound'
+                    : 'unknown';
+            this.emit('record:error', { reason });
+            return;
+        }
+
+        this.audioContext = new AudioContext();
+        const source = this.audioContext.createMediaStreamSource(this.stream);
+        this.analyser = this.audioContext.createAnalyser();
+        this.analyser.fftSize = 256;
+        source.connect(this.analyser);
+
+        this.audioChunks = [];
+        this.mediaRecorder = new MediaRecorder(this.stream);
+        this.mediaRecorder.ondataavailable = event => this.audioChunks.push(event.data);
+        this.mediaRecorder.onstop = () => {
+            const blob = new Blob(this.audioChunks, { type: 'audio/webm' });
+            this.emit('record:ready', { blob });
+        };
+
+        this.started = true;
+        this.mediaRecorder.start();
+        requestAnimationFrame(() => this.checkSilence());
+        this.maxTimer = setTimeout(() => this.stop(), this.maxDuration);
+
+        this.emit('record:start');
     }
 
     stop() {
+        clearTimeout(this.maxTimer);
+        clearTimeout(this.silenceTimer);
+        this.maxTimer = null;
+        this.silenceTimer = null;
 
         if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
             this.mediaRecorder.stop();
         }
-
         if (this.stream) {
             this.stream.getTracks().forEach(track => track.stop());
+            this.stream = null;
         }
-        this.stream = null;
-
         if (this.audioContext && this.audioContext.state !== 'closed') {
             this.audioContext.close();
         }
@@ -64,10 +92,8 @@ class AudioRecorder {
         if (!this.started) {
             return;
         }
-
         this.started = false;
-
-        document.dispatchEvent(new Event('record:stop'));
+        this.emit('record:stop');
     }
 
     isRecording() {
@@ -76,13 +102,16 @@ class AudioRecorder {
 
     stopDueToSilence() {
         this.stop();
-        document.dispatchEvent(new Event('record:silence'));
+        this.emit('record:silence');
     }
 
     checkSilence() {
-        let dataArray = new Uint8Array(this.analyser.frequencyBinCount);
-        this.analyser.getByteFrequencyData(dataArray);
-        let average = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
+        if (!this.started || !this.analyser) {
+            return;
+        }
+        const data = new Uint8Array(this.analyser.frequencyBinCount);
+        this.analyser.getByteFrequencyData(data);
+        const average = data.reduce((sum, value) => sum + value, 0) / data.length;
 
         if (average < this.silenceThreshold) {
             if (!this.silenceTimer) {
@@ -93,71 +122,12 @@ class AudioRecorder {
             this.silenceTimer = null;
         }
 
-        if (this.mediaRecorder.state === 'recording') {
+        if (this.mediaRecorder && this.mediaRecorder.state === 'recording') {
             requestAnimationFrame(() => this.checkSilence());
         }
     }
 
-    processAudio() {
-        const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
-
-        // Show audio player with recorded audio
-        const audioPlayer = document.getElementById('audio-player');
-        const audioPlayerContainer = document.getElementById('audio-player-container');
-        const url = URL.createObjectURL(audioBlob);
-        audioPlayer.src = url;
-        audioPlayerContainer.classList.remove('hidden');
-
-        this.sendAudioToAPI(audioBlob);
-    }
-
-    sendAudioToAPI(audioBlob) {
-        //this.sendSpeechToAPI(audioBlob);
-        this.sendPronunciationToAPI(audioBlob);
-    }
-
-    sendSpeechToAPI(audioBlob) {
-        const formData = new FormData();
-        formData.append("file", audioBlob, "audio.webm");
-
-        fetch("/speech2text", { method: "POST", body: formData })
-            .then(response => response.json())
-            .then(data => {
-                document.querySelector('[data-role="transcription"]').innerText = data.transcript;
-            })
-            .catch(error => console.error("Erreur d'envoi:", error));
-    }
-
-    sendPronunciationToAPI(audioBlob) {
-        const formData = new FormData();
-        formData.append("file", audioBlob, "audio.webm");
-        formData.append("expected_text", document.getElementById('expected-text').value);
-
-        fetch("/pronunciation", { method: "POST", body: formData })
-            .then(response => response.json())
-            .then(data => {
-                console.log(data);
-                console.log(JSON.stringify(data));
-                document.dispatchEvent(new CustomEvent('analyze:done', {
-                    detail: data
-                }));
-            })
-            .catch(error => {
-                console.error("Erreur d'envoi:", error);
-                document.dispatchEvent(new Event('analyze:error'));
-            });
-    }
-
-    sendGrammarApi(text) {
-        const formData = new FormData();
-        formData.append("text", text);
-
-        fetch("/grammar", { method: "POST", body: formData })
-            .then(response => response.json())
-            .then(data => {
-                document.querySelector('[data-role="grammar"]').innerText = JSON.stringify(data);
-                this.displayResults();
-            })
-            .catch(error => console.error("Erreur d'envoi:", error));
+    emit(name, detail) {
+        document.dispatchEvent(new CustomEvent(name, { detail }));
     }
 }
