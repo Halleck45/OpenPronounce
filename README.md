@@ -19,12 +19,12 @@
 
 ```console
 $ openpronounce recording.wav "Hello, how are you?"
-Score        : 55.74/100
+Score        : 59.0/100
 Transcription: HELL NO WHO ARE YOU
 Heard phones : /h ɛ l n oʊ h u ɑɹ j u/
 Mispronounced:
-  - hello: expected /həloʊ/, heard /hɛlnoʊ/
-  - how: expected /haʊ/, heard /hu/
+  - hello: expected /həloʊ/, heard /hɛlnoʊ/ (confidence 89%)
+  - how: expected /haʊ/, heard /hu/ (confidence 50%)
 ```
 
 Commercial APIs (Azure Speech *Pronunciation Assessment*, SpeechAce, ELSA...) do this behind a paywall and a network call. OpenPronounce is the self-hosted, MIT-licensed building block for language-learning apps, EdTech products and research: no API key, no per-minute billing, your learners' voices stay on your servers.
@@ -85,7 +85,7 @@ Every function takes an optional `lang="en"`; `compare_audio_with_text(sound, "B
 
 ### Languages
 
-English (`en`) is the default and the only calibrated language. `fr`, `es`, `de`, `it`, `pt` and `nl` are experimental: the phone recognizer (`wav2vec2-lv-60-espeak-cv-ft`) is multilingual, but the word transcription models are community XLSR checkpoints (`jonatasgrosman/wav2vec2-large-xlsr-53-*`, ~1.2 GB each, downloaded on first use) and no per-language calibration of the score has been done. `openpronounce.LANGUAGES` lists the registry, `get_language(code)` raises `ValueError` on unknown codes.
+English (`en`) is the default and the only calibrated language. `fr`, `es`, `de`, `it`, `pt` and `nl` are experimental: the phone recognizer (`wav2vec2-lv-60-espeak-cv-ft`) is multilingual, but the word transcription models are community XLSR checkpoints (`jonatasgrosman/wav2vec2-large-xlsr-53-*`, ~1.2 GB each, downloaded on first use) and the score is only partly calibrated for them (the acoustic baseline is, the phone thresholds are not). `openpronounce.LANGUAGES` lists the registry, `get_language(code)` raises `ValueError` on unknown codes.
 
 ### Docker
 
@@ -100,12 +100,12 @@ GPU (needs the NVIDIA Container Toolkit): `docker build -f Dockerfile.gpu -t ope
 ### Web application (FastAPI)
 
 ```bash
-pip install "openpronounce[app]"
 git clone https://github.com/Halleck45/OpenPronounce.git && cd OpenPronounce
+pip install -e ".[app]"
 uvicorn server:app --host 0.0.0.0 --port 8000
 ```
 
-The UI records from the microphone, scores the sentence, animates a mouth (visemes) and plots the phoneme traces and prosody. Browsers only allow microphone access on `https://` or `localhost`.
+The UI records from the microphone (or takes a file), scores the sentence, shows each word with the wrong phones highlighted and how sure we are, animates a mouth (visemes) and plots the phoneme traces and prosody. Browsers only allow microphone access on `https://` or `localhost`.
 
 | Endpoint | Body (multipart form) | Returns |
 |---|---|---|
@@ -168,7 +168,7 @@ viseme.play(["həloʊ", "huː", "ɑːɹ", "juː"]);
 
 ## Limitations
 
-- Only English is calibrated. Other languages reuse the English thresholds and score weights, the acoustic embeddings always come from the English checkpoint, and their word transcription relies on community XLSR models.
+- Only English is calibrated against human ratings. Other languages reuse the English phone thresholds and score weights (only the acoustic baseline is per language), the acoustic embeddings always come from the English checkpoint, and their word transcription relies on community XLSR models.
 - With the default gTTS reference voice, the first analysis of a given sentence needs network access (references are cached afterwards). Set `OPENPRONOUNCE_TTS=piper` or `kokoro` for a fully offline setup, see [Reference voice](#reference-voice).
 - Wav2Vec2 was trained on native read speech (LibriSpeech). Very strong accents, children's voices and noisy recordings degrade the transcription, and therefore the feedback.
 - The phone recognizer itself has an error rate (about 10 % of phones on a clean native reading of the bundled Harvard sentences); expect an occasional false alarm on short words. On speechocean762 (Mandarin learners, many children) one flagged word in five is rated as mispronounced by the human raters, for seven in ten of the words they reject; the rest are accent traits the raters accept, alignment slips on short function words and recognizer errors. This is a heuristic assessment calibrated on that corpus, not a Goodness-of-Pronunciation model trained on annotated L2 speech.
