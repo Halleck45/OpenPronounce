@@ -16,11 +16,16 @@ sample of the test split and compares the output with the human ratings.
 ```bash
 # inference (resumable: utterances already in the CSV are skipped)
 HF_HOME=~/.cache/huggingface python benchmarks/speechocean762.py --sample 500 \
-    --out benchmarks/results/speechocean762.csv
+    --out benchmarks/results/speechocean762-v0.3.csv
 
-# analysis of the CSV (correlations, word-level precision/recall, grid search)
-python benchmarks/speechocean762.py --report --out benchmarks/results/speechocean762.csv
+# analysis of the CSV (correlations, word-level precision/recall, grid search + CV)
+python benchmarks/speechocean762.py --report --out benchmarks/results/speechocean762-v0.3.csv
 ```
+
+`--report` also recomputes the score from the stored components with the constants of
+the installed `openpronounce` when they differ from the ones used at run time, runs the
+grid search (weights on a 0.1 step, `ACOUSTIC_DISTANCE_GOOD` in 3..8, `BAD` in 12..22)
+and a 2-fold x 3-split cross-validation of the grid.
 
 The parquet file (`mispeech/speechocean762` on the Hugging Face hub, audio included) is
 downloaded to `~/.cache/openpronounce/speechocean762/` on first run (~300 MB for the
@@ -35,7 +40,107 @@ our `score`, the three components (`acoustic_distance`, `phoneme_error_rate`,
 per-utterance word `recall`/`precision` (a word is "bad" for the raters when its
 accuracy is below 5) and `wall_time` in seconds.
 
-### Results (2026-08-15)
+### Results, 0.3.0 (2026-08-15)
+
+Same 500 utterances (seed 0), OpenPronounce 0.3.0 (worktree of commit 3759d4f: fixed
+phonemizer fallback, confidence-weighted word flagging), same models, gTTS references,
+CPU, 6 threads: 3.0 s per utterance, 25 min. Raw data: `results/speechocean762-v0.3.csv`.
+`score` in the CSV is the run-time score with the 0.2.1 constants (0.2/0.5/0.3, bounds
+5/15); the 0.3.0 constants (0.3/0.4/0.3, bounds 6/15) are evaluated by recomputing the
+score from the stored components (`--report` does it).
+
+Correlation with the human ratings (Pearson / Spearman):
+
+| pair                                    | 0.2.1 run | 0.2.1 constants, 0.3.0 code | 0.3.0 constants |
+|-----------------------------------------|----------:|----------------------------:|----------------:|
+| score vs human total                    | 0.571 / 0.583 | 0.621 / 0.638 | **0.633 / 0.652** |
+| score vs human accuracy                 | 0.535 / 0.553 | 0.591 / 0.618 | 0.603 / 0.631 |
+| score vs human fluency                  | 0.532 / 0.515 | 0.578 / 0.571 | 0.595 / 0.590 |
+| score vs human prosodic                 | 0.552 / 0.541 | 0.607 / 0.606 | 0.618 / 0.622 |
+| per-speaker mean score vs mean total (106 speakers, Spearman) | 0.78 | 0.820 | 0.825 |
+| acoustic_distance vs human total        | -0.639 / -0.666 | -0.638 / -0.666 | same |
+| acoustic_distance vs human accuracy     | -0.608 / -0.642 | -0.607 / -0.641 | same |
+| phoneme_error_rate vs human total       | -0.041 / -0.409 | -0.554 / -0.568 | same |
+| phoneme_error_rate vs human accuracy    | -0.018 / -0.372 | -0.519 / -0.540 | same |
+| word_error_rate vs human total          | -0.519 / -0.551 | -0.519 / -0.551 | same |
+| word_error_rate vs human accuracy       | -0.503 / -0.548 | -0.503 / -0.548 | same |
+
+The phonemization fix is what moved the phone error rate from noise (Pearson -0.04)
+to a real signal (-0.55): only 2 utterances keep a PER above 1 (noisy recordings with
+many insertions, not empty expected phones). Score mean 54.1, sd 26.8 with the new
+constants (55.6 / 26.2 with the old ones); mean score per human total 3 -> 19,
+4 -> 26, 5 -> 28, 6 -> 40, 7 -> 46, 8 -> 66, 9 -> 76 (old constants, monotonic, sd
+11 to 23 within a level).
+
+Word level (same rule as `word_detection.py`, "bad" = human accuracy < 5): micro
+recall 0.732, precision 0.196, F1 0.309, 628 of 3,146 words flagged (20 %).
+
+Grid search (Spearman of the recomputed score with the human total, best per weight
+triple) and 2-fold x 3-split cross-validation (best combination of one half scored on
+the other half, mean over the 6 held-out halves):
+
+| weights (ac/ph/wo) | bounds | full-sample Spearman | CV held-out mean (6 folds) |
+|---|---|--:|--:|
+| best of each training half (0.7/0.3/0 or 0.7/0.2/0.1, bounds 3-7 / 16-21) | | | 0.676 |
+| 0.7 / 0.2 / 0.1 | 5 / 18 | 0.680 | 0.678 |
+| 0.8 / 0.2 / 0.0 | 5 / 22 | 0.682 (grid maximum) | |
+| 0.8 / 0.1 / 0.1 | 5 / 18 | 0.677 | 0.676 |
+| 0.6 / 0.2 / 0.2 | 5 / 18 | 0.672 | 0.669 |
+| 1.0 / 0 / 0 (acoustic alone) | 5 / 18 | 0.666 | 0.665 |
+| **0.3 / 0.4 / 0.3 (0.3.0 defaults)** | **6 / 15** | **0.652** | **0.649** |
+| 0.3 / 0.3 / 0.4 | 8 / 15 | 0.648 | 0.646 |
+| 0.4 / 0.4 / 0.2 | 5 / 15 | 0.662 | 0.660 |
+| 0.2 / 0.5 / 0.3 (0.2.1 defaults) | 5 / 15 | 0.638 | 0.635 |
+
+The 0.3.0 defaults beat the 0.2.1 ones on all 6 held-out halves (+0.006 to +0.016) and
+the acoustic-heavy combinations beat both on every half.
+
+Bundled samples (`assets/`), score with the 0.2.1 -> 0.3.0 constants, same components:
+
+| file | text | acoustic distance | PER | WER | 0.2.1 | 0.3.0 |
+|---|---|--:|--:|--:|--:|--:|
+| `developer.wav` (good) | hello I am a developer | 6.32 | 0.00 | 0.00 | 97.4 | 98.9 |
+| `developer_error_an.wav` (one wrong word) | same | 6.70 | 0.12 | 0.20 | 84.4 | 86.7 |
+| `developer1.wav` (bad) | same | 11.43 | 0.56 | 0.40 | 47.0 | 47.4 |
+| `example.mp3` (bad) | Hello, how are you? | 7.55 | 0.33 | 0.75 | 55.7 | 59.0 |
+| `harvard.wav` (good, long) | `harvard_text.txt` | 10.06 | 0.12 | 0.00 | 83.7 | 81.5 |
+| `harvard_2_errors.wav` | `harvard_text.txt` | 8.14 | 0.09 | 0.19 | 83.8 | 83.8 |
+| `reference.wav` (wrong sentence) | hello I am a developer | 11.65 | 0.81 | 1.00 | 16.1 | 18.7 |
+
+With the grid maximum (0.8/0.2/0, bounds 5/22) the wrong sentence would score 43 and
+`example.mp3` 86; with 0.7/0.2/0.1 and 5/18, 38 and 72. The acoustic distance of a
+wrong sentence (11.7) is the same as that of a bad reading of the right one (11.4), so
+only the phone and word terms separate them.
+
+### Why 0.3 / 0.4 / 0.3, bounds 6 / 15
+
+- The corpus asks for a heavy acoustic weight (0.7 to 0.8): the human "total" is
+  mostly an accuracy judgment on short sentences by Mandarin learners, half of them
+  children, against one adult gTTS voice, and the DTW distance is the best single
+  proxy for that native-vs-non-native distance (0.666 alone).
+- The product asks for the opposite: the score has to react to a specific mistake (a
+  wrong word, a missing syllable) and to collapse on a wrong sentence, which the
+  acoustic distance does not see. Among the combinations that keep a wrong sentence at
+  or under 20, a good reading at or above 85 (`developer.wav`) and the ordering of the
+  bundled samples, 0.3/0.4/0.3 with 6/15 is the best on the full sample and the one
+  selected on 5 of the 6 training halves (0.3/0.3/0.4 with 8/15 on the sixth); it
+  keeps 70 % of the weight on the phone and word terms.
+- The gain over the 0.2.1 defaults is small (Spearman 0.638 -> 0.652, +0.014 held out
+  on every fold) and comes from moving 0.1 of weight from the phones (0.5 -> 0.4, PER
+  is now a working but weaker signal than the acoustic distance) to the acoustic term
+  and from `ACOUSTIC_DISTANCE_GOOD` at 6, where a clean native-like reading sits. The
+  headroom (0.68) stays with the acoustic term; a non-linear combination (acoustic
+  term gated by the word error rate) is the next thing to try, not more grid search.
+- Caveats unchanged: single population and single reference voice, sentences of 2 to
+  12 words. The reference cache key changed with the TTS backends, so gTTS
+  re-synthesized all 500 references for this run; 180 acoustic distances differ
+  slightly from the 0.2.1 run (gTTS is not bit-for-bit reproducible), without any
+  effect on the acoustic correlations (identical to three decimals).
+
+### Results, 0.2.1 (2026-08-15, history)
+
+Kept as it was written; the phonemization bug described in the interpretation is
+fixed in 0.3.0 and the recommendation was superseded by the section above.
 
 - N = 500 utterances of the test split (123 speakers), OpenPronounce 0.2.1 (worktree of
   commit ea7f4df), `facebook/wav2vec2-large-960h` + `facebook/wav2vec2-lv-60-espeak-cv-ft`,

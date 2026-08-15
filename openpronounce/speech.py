@@ -314,19 +314,24 @@ def align_sequences_dtw(seq1, seq2):
 
 # Mean per-step DTW distance between Wav2Vec2 frames of the learner and of the TTS
 # reference. Measured on the bundled samples: ~6 for a clean native-like reading,
-# ~10 for a good reading by a different voice, ~12-15 for a wrong sentence.
-ACOUSTIC_DISTANCE_GOOD = 5.0
+# ~10 for a good reading by a different voice, ~12-15 for a wrong sentence. On
+# speechocean762 the median is 11.5 (9.3 to 13.6 for the middle half).
+ACOUSTIC_DISTANCE_GOOD = 6.0
 ACOUSTIC_DISTANCE_BAD = 15.0
 
-SCORE_WEIGHTS = {"acoustic": 0.2, "phonemes": 0.5, "words": 0.3}
+# Calibrated on 500 speechocean762 utterances (see benchmarks/README.md): Spearman 0.65
+# with the human total score. Heavier acoustic weights correlate slightly better (0.68
+# at 0.7/0.2/0.1) but no longer punish a wrong sentence, so the phone and word terms
+# keep the majority of the weight.
+SCORE_WEIGHTS = {"acoustic": 0.3, "phonemes": 0.4, "words": 0.3}
 
 
 def compute_pronunciation_score(acoustic_distance, phoneme_error_rate, word_error_rate):
     """Combine length-independent measures into a 0-100 score.
 
     - ``acoustic_distance``: mean per-step DTW distance between Wav2Vec2 embeddings
-      (see :data:`ACOUSTIC_DISTANCE_GOOD` / :data:`ACOUSTIC_DISTANCE_BAD`), 20%.
-    - ``phoneme_error_rate``: edited phonemes / expected phonemes, 50%.
+      (see :data:`ACOUSTIC_DISTANCE_GOOD` / :data:`ACOUSTIC_DISTANCE_BAD`), 30%.
+    - ``phoneme_error_rate``: edited phonemes / expected phonemes, 40%.
     - ``word_error_rate``: edited words / expected words, 30%.
 
     Every component is clipped to [0, 100] before weighting.

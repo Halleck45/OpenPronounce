@@ -5,7 +5,7 @@ Two modes:
     # run inference on a fixed random sample of the test split (resumable)
     python benchmarks/speechocean762.py --sample 500 --out benchmarks/results/speechocean762.csv
 
-    # analyse an existing CSV: correlations, word-level precision/recall, grid search
+    # analyse an existing CSV: correlations, word-level precision/recall, grid search + CV
     python benchmarks/speechocean762.py --report --out benchmarks/results/speechocean762.csv
 
 The dataset (parquet, with audio) is downloaded from the Hugging Face hub
@@ -209,43 +209,77 @@ def score_from_components(ad, per, wer, good, bad, w_ac, w_ph, w_wo):
     return np.clip(w_ac * acoustic + w_ph * phon + w_wo * word, 0, 100)
 
 
+# Grid of the score constants explored by ``--report``: weights on a 0.1 step (summing to
+# 1), acoustic bounds GOOD in 3..8 and BAD in 12..22.
+GRID_WEIGHTS = [(a / 10, p / 10, round((10 - a - p) / 10, 1)) for a in range(11) for p in range(11 - a)]
+GRID_GOOD = [float(g) for g in range(3, 9)]
+GRID_BAD = [float(b) for b in range(12, 23)]
+GRID = [(w, g, b) for w in GRID_WEIGHTS for g in GRID_GOOD for b in GRID_BAD
+        if w[0] > 0 or (g, b) == (GRID_GOOD[0], GRID_BAD[0])]  # bounds irrelevant without acoustic weight
+
+# Combinations always reported by the cross-validation, next to the current defaults.
+CV_CANDIDATES = [
+    ((0.2, 0.5, 0.3), 5.0, 15.0),   # 0.2.1 defaults
+    ((0.3, 0.4, 0.3), 6.0, 15.0),   # 0.3.0 defaults
+    ((0.6, 0.2, 0.2), 5.0, 18.0),
+    ((0.7, 0.2, 0.1), 5.0, 18.0),
+    ((0.8, 0.1, 0.1), 5.0, 18.0),
+    ((1.0, 0.0, 0.0), 5.0, 18.0),   # acoustic distance alone
+]
+
+
+def current_constants():
+    from openpronounce import speech
+
+    w = speech.SCORE_WEIGHTS
+    return (w["acoustic"], w["phonemes"], w["words"]), speech.ACOUSTIC_DISTANCE_GOOD, speech.ACOUSTIC_DISTANCE_BAD
+
+
+def components(rows):
+    import numpy as np
+
+    return tuple(np.array([r[k] for r in rows]) for k in ("acoustic_distance", "phoneme_error_rate", "word_error_rate"))
+
+
 def grid_search(rows, human, top=8):
     import numpy as np
     from scipy.stats import spearmanr
 
-    from openpronounce import speech
+    ad, per, wer = components(rows)
 
-    ad = np.array([r["acoustic_distance"] for r in rows])
-    per = np.array([r["phoneme_error_rate"] for r in rows])
-    wer = np.array([r["word_error_rate"] for r in rows])
+    def rho(combo, idx=slice(None)):
+        (w_ac, w_ph, w_wo), good, bad = combo
+        s = score_from_components(ad[idx], per[idx], wer[idx], good, bad, w_ac, w_ph, w_wo)
+        return spearmanr(s, human[idx]).correlation
 
-    weights = [(a / 10, p / 10, (10 - a - p) / 10) for a in range(11) for p in range(11 - a)]
-    goods = [0.0, 2.0, 4.0, 5.0, 6.0, 7.0, 8.0]
-    bads = [8.0, 10.0, 12.0, 15.0, 18.0, 20.0, 25.0, 30.0]
-    results = []
-    for (w_ac, w_ph, w_wo), good, bad in itertools.product(weights, goods, bads):
-        if bad <= good:
-            continue
-        if w_ac == 0 and (good, bad) != (goods[0], bads[0]):
-            continue  # acoustic bounds are irrelevant without acoustic weight
-        s = score_from_components(ad, per, wer, good, bad, w_ac, w_ph, w_wo)
-        rho = spearmanr(s, human).correlation
-        results.append((rho, w_ac, w_ph, w_wo, good, bad))
-    results.sort(reverse=True)
-
-    default = (
-        speech.SCORE_WEIGHTS["acoustic"], speech.SCORE_WEIGHTS["phonemes"], speech.SCORE_WEIGHTS["words"],
-        speech.ACOUSTIC_DISTANCE_GOOD, speech.ACOUSTIC_DISTANCE_BAD,
-    )
-    s = score_from_components(ad, per, wer, default[3], default[4], *default[:3])
-    default_rho = spearmanr(s, human).correlation
+    results = sorted(((rho(c), c) for c in GRID), reverse=True)
+    default = current_constants()
 
     print("\nGrid search (Spearman of recomputed score vs human total):")
     print(f"{'spearman':>9} {'w_acoustic':>10} {'w_phonemes':>10} {'w_words':>8} {'AD_GOOD':>8} {'AD_BAD':>7}")
-    for rho, w_ac, w_ph, w_wo, good, bad in results[:top]:
-        print(f"{rho:9.4f} {w_ac:10.1f} {w_ph:10.1f} {w_wo:8.1f} {good:8.1f} {bad:7.1f}")
-    print(f"{default_rho:9.4f} {default[0]:10.1f} {default[1]:10.1f} {default[2]:8.1f} {default[3]:8.1f} {default[4]:7.1f}  <- current defaults")
-    return results, default_rho
+    for r, ((w_ac, w_ph, w_wo), good, bad) in results[:top]:
+        print(f"{r:9.4f} {w_ac:10.1f} {w_ph:10.1f} {w_wo:8.1f} {good:8.1f} {bad:7.1f}")
+    (w_ac, w_ph, w_wo), good, bad = default
+    print(f"{rho(default):9.4f} {w_ac:10.1f} {w_ph:10.1f} {w_wo:8.1f} {good:8.1f} {bad:7.1f}  <- current defaults")
+
+    # Two-fold cross-validation, three random splits: the best combination of one half is
+    # scored on the other half, next to fixed candidates.
+    n = len(rows)
+    folds = []
+    for seed in range(3):
+        perm = np.random.RandomState(seed).permutation(n)
+        folds.append((perm[: n // 2], perm[n // 2:]))
+        folds.append((perm[n // 2:], perm[: n // 2]))
+    print("\nCross-validation (2 folds x 3 splits), held-out Spearman with human total:")
+    tuned = [(rho(max(GRID, key=lambda c: rho(c, train)), test)) for train, test in folds]
+    print(f"{'best of the training half':32} mean {np.mean(tuned):.3f}  folds " + " ".join(f"{v:.3f}" for v in tuned))
+    for combo in [default] + [c for c in CV_CANDIDATES if c != default]:
+        vals = [rho(combo, test) for _, test in folds]
+        (w_ac, w_ph, w_wo), good, bad = combo
+        name = f"{w_ac:.1f}/{w_ph:.1f}/{w_wo:.1f} bounds {good:.0f}/{bad:.0f}"
+        print(f"{name:32} mean {np.mean(vals):.3f}  folds " + " ".join(f"{v:.3f}" for v in vals)
+              + ("  <- current defaults" if combo == default else ""))
+    return results
 
 
 def report(args):
@@ -266,36 +300,43 @@ def report(args):
     fluency = np.array([r["human_fluency"] for r in rows])
     prosodic = np.array([r["human_prosodic"] for r in rows])
 
+    # The CSV stores the score computed at run time; when the constants have changed since,
+    # also report the score recomputed from the stored components with the current ones.
+    weights, good, bad = current_constants()
+    recomputed = score_from_components(*components(rows), good, bad, *weights)
+    scores = [("score", score)]
+    if np.abs(recomputed - score).max() > 0.05:
+        scores.append(("score (recomputed, current constants)", recomputed))
+
     print("\nHuman total: mean %.2f, std %.2f. Our score: mean %.1f, std %.1f"
           % (total.mean(), total.std(), score.mean(), score.std()))
+    if len(scores) > 1:
+        print("Recomputed score with %.1f/%.1f/%.1f, bounds %.0f/%.0f: mean %.1f, std %.1f"
+              % (*weights, good, bad, recomputed.mean(), recomputed.std()))
     print("\nCorrelations (Pearson / Spearman):")
-    print(f"{'pair':44} {'pearson':>8} {'spearman':>9}")
-    for name, a, b in [
-        ("score vs human total", score, total),
-        ("score vs human accuracy", score, accuracy),
-        ("score vs human fluency", score, fluency),
-        ("score vs human prosodic", score, prosodic),
-    ]:
-        p, s = corr(a, b)
-        print(f"{name:44} {p:8.3f} {s:9.3f}")
+    print(f"{'pair':56} {'pearson':>8} {'spearman':>9}")
+    for label, sc in scores:
+        for name, h in (("total", total), ("accuracy", accuracy), ("fluency", fluency), ("prosodic", prosodic)):
+            p, s = corr(sc, h)
+            print(f"{label + ' vs human ' + name:56} {p:8.3f} {s:9.3f}")
     for comp in ("acoustic_distance", "phoneme_error_rate", "word_error_rate"):
         x = np.array([r[comp] for r in rows])
         for hname, h in (("accuracy", accuracy), ("total", total)):
             p, s = corr(x, h)
-            print(f"{comp + ' vs human ' + hname:44} {p:8.3f} {s:9.3f}")
+            print(f"{comp + ' vs human ' + hname:56} {p:8.3f} {s:9.3f}")
 
-    # Utterances where the expected phone list was empty (phonemization failure):
-    # PER is then len(heard)/1 and no word can be flagged.
+    # Utterances with more phone edits than expected phones. Before 0.3.0 this was the
+    # signature of a phonemization failure (expected phones empty, PER = len(heard)/1, no
+    # word flagged); it is now a handful of very noisy recordings.
     broken = [r for r in rows if r["phoneme_error_rate"] > 1]
     if broken:
         keep = np.array([r["phoneme_error_rate"] <= 1 for r in rows])
-        print(f"\n{len(broken)} utterances have PER > 1 (expected phones empty, phonemization failure). "
-              f"On the {int(keep.sum())} others:")
+        print(f"\n{len(broken)} utterances have PER > 1. On the {int(keep.sum())} others:")
         for name, x in (("score", score), ("acoustic_distance", -np.array([r['acoustic_distance'] for r in rows])),
                         ("phoneme_error_rate", -np.array([r['phoneme_error_rate'] for r in rows])),
                         ("word_error_rate", -np.array([r['word_error_rate'] for r in rows]))):
             p, s = corr(x[keep], total[keep])
-            print(f"  {name + ' vs human total':42} {p:8.3f} {s:9.3f}")
+            print(f"  {name + ' vs human total':54} {p:8.3f} {s:9.3f}")
 
     # Word level
     n_bad = sum(r["n_human_bad"] for r in rows)
@@ -316,7 +357,7 @@ def report(args):
     if broken:
         ok = [r for r in rows if r["phoneme_error_rate"] <= 1]
         b, fl, h = (sum(r[k] for r in ok) for k in ("n_human_bad", "n_flagged", "n_hits"))
-        print(f"  on the {len(ok)} utterances without phonemization failure: "
+        print(f"  on the {len(ok)} utterances with PER <= 1: "
               f"recall = {h / b:.3f}, precision = {h / fl:.3f} ({int(b)} human-bad, {int(fl)} flagged)")
 
     # Score distribution by human total (sanity check of monotonicity)
@@ -324,6 +365,15 @@ def report(args):
     for t in sorted(set(total)):
         m = score[total == t]
         print(f"  total={int(t):2d}: n={len(m):3d} mean score={m.mean():5.1f} std={m.std():4.1f}")
+
+    # Per speaker (at least 3 utterances): mean score vs mean human total
+    speakers = defaultdict(list)
+    for i, r in enumerate(rows):
+        speakers[r["speaker"]].append(i)
+    idx = [v for v in speakers.values() if len(v) >= 3]
+    for label, sc in scores:
+        s = spearmanr([sc[v].mean() for v in idx], [total[v].mean() for v in idx]).correlation
+        print(f"Per speaker ({len(idx)} speakers with >= 3 utterances), {label}: Spearman {s:.3f}")
 
     grid_search(rows, total)
 

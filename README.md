@@ -75,7 +75,7 @@ from openpronounce import load_audio, compare_audio_with_text
 sound = load_audio("recording.wav")          # any format ffmpeg reads, resampled to 16 kHz mono
 result = compare_audio_with_text(sound, "Hello, I am a developer")
 
-print(result["score"])                       # 97.36
+print(result["score"])                       # 98.93
 for err in result["differences"]["errors"]:
     print(err["word"], err["expected"], "->", err["actual"] or "(missing)")
 ```
@@ -137,8 +137,10 @@ The approach is described in [this blog post](https://blog.lepine.pro/en/ai-wav2
 
 ### The score
 
-`score = 0.2 × acoustic + 0.5 × (1 − phoneme error rate) + 0.3 × (1 − word error rate)`, each term clipped to [0, 100].
-The acoustic term maps the mean DTW distance linearly from 5 (100) to 15 (0); these bounds come from the bundled samples (`assets/`) and are exposed as `speech.ACOUSTIC_DISTANCE_GOOD` / `speech.ACOUSTIC_DISTANCE_BAD` if you want to recalibrate on your own data. All three terms are length-independent, so a long paragraph and a two-word sentence are scored on the same scale.
+`score = 0.3 × acoustic + 0.4 × (1 − phoneme error rate) + 0.3 × (1 − word error rate)`, each term clipped to [0, 100].
+The acoustic term maps the mean DTW distance linearly from 6 (100) to 15 (0); the bounds are exposed as `speech.ACOUSTIC_DISTANCE_GOOD` / `speech.ACOUSTIC_DISTANCE_BAD` and the weights as `speech.SCORE_WEIGHTS` if you want to recalibrate on your own data. All three terms are length-independent, so a long paragraph and a two-word sentence are scored on the same scale.
+
+Weights and bounds were calibrated against human ratings: Spearman ρ = 0.65 with the expert total score on 500 speechocean762 utterances (0.83 once averaged per speaker), see [benchmarks/](benchmarks/README.md). A heavier acoustic weight would correlate a little better on that corpus (0.68) but would no longer punish a wrong sentence, so the phone and word terms keep most of the weight: a learner who says the wrong word must lose points.
 
 ### Reference voice
 
@@ -152,7 +154,7 @@ The acoustic term needs a native reading of the expected sentence: it is synthes
 
 `OPENPRONOUNCE_TTS_VOICE` (or `voice=`) selects the voice: a Piper voice id such as `en_US-lessac-medium` (default) or `en_GB-cori-medium`, a Kokoro voice such as `af_heart` (default) or `bf_emma`, or, for gTTS, the Google domain that sets the accent (`com`, `co.uk`, `com.au`). Piper and Kokoro ship a default voice for the languages they cover (`openpronounce.tts.PIPER_DEFAULT_VOICES`, `openpronounce.tts.KOKORO_LANGUAGES`); models and voices land in the Hugging Face cache (`$HF_HOME`), so `HF_HUB_OFFLINE=1` works once they are there. The reference cache is keyed by backend and voice, so switching engines does not serve stale references.
 
-For self-hosting we recommend Piper: no network at all, small, fast on CPU, and no PyTorch model to load next to Wav2Vec2. Kokoro sounds more natural but costs ~330 MB and a few seconds of warm-up. On the bundled samples the acoustic distance stays on the gTTS scale with Kokoro (6.2 / 11.6 / 10.3 for `developer.wav`, `developer1.wav`, `harvard.wav` versus 6.3 / 11.4 / 10.1 with gTTS) and shifts up by 1 to 2 with Piper on good readings (8.2 / 11.9 / 11.0), which lowers the acoustic term slightly (a 20 % weight in the score) until it is recalibrated for that engine.
+For self-hosting we recommend Piper: no network at all, small, fast on CPU, and no PyTorch model to load next to Wav2Vec2. Kokoro sounds more natural but costs ~330 MB and a few seconds of warm-up. On the bundled samples the acoustic distance stays on the gTTS scale with Kokoro (6.2 / 11.6 / 10.3 for `developer.wav`, `developer1.wav`, `harvard.wav` versus 6.3 / 11.4 / 10.1 with gTTS) and shifts up by 1 to 2 with Piper on good readings (8.2 / 11.9 / 11.0), which lowers the acoustic term slightly (a 30 % weight in the score) until it is recalibrated for that engine.
 
 ## Visemes
 
@@ -180,7 +182,7 @@ Contributions welcome on any of these:
 - [x] Offline TTS reference (Piper / Kokoro), `OPENPRONOUNCE_TTS`
 - [x] Per-phone confidence (CTC posteriors) to grade errors instead of a yes/no per word
 - [x] Other languages (fr, es, de, it, pt, nl, experimental)
-- [ ] Benchmark on a public L2 dataset (speechocean762) to calibrate the score
+- [x] Benchmark on a public L2 dataset (speechocean762) to calibrate the score
 - [x] GPU support (`Dockerfile.gpu`, `OPENPRONOUNCE_DEVICE`)
 
 ## Contributing
