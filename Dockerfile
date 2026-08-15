@@ -3,8 +3,8 @@
 #   docker build -t openpronounce .
 #   docker run -p 8000:8000 openpronounce
 #
-# The Wav2Vec2 model (~1.2 GB) is downloaded at build time so the container
-# starts fast and works offline (except gTTS, which needs the network).
+# The two Wav2Vec2 models (~1.2 GB each) are downloaded at build time so the
+# container starts fast and works offline (except gTTS, which needs the network).
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -25,7 +25,8 @@ COPY pyproject.toml README.md ./
 COPY openpronounce ./openpronounce
 RUN pip install ".[app]"
 
-RUN python -c "from openpronounce.speech import _load_models; _load_models()"
+RUN python -c "from openpronounce.speech import _load_models; _load_models()" \
+    && python -c "from openpronounce.phones import _load_model; _load_model()"
 
 COPY server.py ./
 COPY templates ./templates

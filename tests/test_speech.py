@@ -205,6 +205,7 @@ class TestAlignmentFunctions(unittest.TestCase):
 
 class TestIntegration(unittest.TestCase):
 
+    @patch("openpronounce.speech.phones.transcribe_phones")
     @patch("openpronounce.speech.interpolate_f0")
     @patch("openpronounce.speech.extract_f0")
     @patch("openpronounce.speech.extract_energy")
@@ -214,7 +215,8 @@ class TestIntegration(unittest.TestCase):
     @patch("openpronounce.speech.extract_embeddings")
     def test_compare_audio_with_text_mocked(self, mock_extract_emb, mock_text2speech, mock_load,
                                             mock_transcribe, mock_extract_energy, mock_extract_f0,
-                                            mock_interp_f0):
+                                            mock_interp_f0, mock_transcribe_phones):
+        mock_transcribe_phones.return_value = ["h", "ə", "l", "oʊ"]
         sample_audio = np.random.randn(16000).astype(np.float32)
         mock_extract_emb.return_value = np.random.randn(20, 8)
         mock_text2speech.return_value = "temp_reference.wav"
@@ -231,9 +233,22 @@ class TestIntegration(unittest.TestCase):
         self.assertGreaterEqual(result["score"], 0)
         self.assertLessEqual(result["score"], 100)
         self.assertEqual(result["differences"]["errors"], [])
+        self.assertEqual(result["differences"]["heard_phones"], ["h", "ə", "l", "oʊ"])
         self.assertEqual(result["prosody"]["f0"], [100, 110, 120])
         mock_text2speech.assert_called_with("hello")
         mock_transcribe.assert_called_with(sample_audio)
+
+    @patch("openpronounce.speech.interpolate_f0", return_value=np.array([100.0]))
+    @patch("openpronounce.speech.extract_f0", return_value=np.array([100.0]))
+    @patch("openpronounce.speech.extract_energy", return_value=np.array([1.0]))
+    @patch("openpronounce.speech.transcribe", return_value="HELLO WORLD")
+    @patch("openpronounce.speech.audio.load", return_value=np.zeros(16000, dtype=np.float32))
+    @patch("openpronounce.speech.audio.text2speech", return_value="ref.wav")
+    @patch("openpronounce.speech.extract_embeddings", return_value=np.zeros((10, 4)))
+    def test_text_fallback_when_phone_model_disabled(self, *_):
+        result = speech.compare_audio_with_text(np.zeros(16000, dtype=np.float32), "hello world", use_phone_model=False)
+        self.assertEqual(result["differences"]["errors"], [])
+        self.assertNotIn("heard_phones", result["differences"])
 
 
 if __name__ == "__main__":

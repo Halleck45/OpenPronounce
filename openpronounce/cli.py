@@ -31,6 +31,8 @@ def main(argv=None):
 
     print(f"Score        : {result['score']}/100")
     print(f"Transcription: {result['transcribe']}")
+    if "heard_phones" in result["differences"]:
+        print(f"Heard phones : /{' '.join(result['differences']['heard_phones'])}/")
     errors = result["differences"]["errors"]
     if errors:
         print("Mispronounced:")

@@ -18,11 +18,12 @@
 
 ```console
 $ openpronounce recording.wav "Hello, how are you?"
-Score        : 34.9/100
+Score        : 55.74/100
 Transcription: HELL NO WHO ARE YOU
+Heard phones : /h ɛ l n oʊ h u ɑɹ j u/
 Mispronounced:
-  - Hello: expected /həloʊ/, heard /noʊ/
-  - how: expected /haʊ/, heard /huː/
+  - hello: expected /həloʊ/, heard /hɛlnoʊ/
+  - how: expected /haʊ/, heard /hu/
 ```
 
 Commercial APIs (Azure Speech *Pronunciation Assessment*, SpeechAce, ELSA...) do this behind a paywall and a network call. OpenPronounce is the self-hosted, MIT-licensed building block for language-learning apps, EdTech products and research: no API key, no per-minute billing, your learners' voices stay on your servers.
@@ -35,7 +36,8 @@ For each recording, a JSON-serializable dict:
 |---|---|
 | `score` | 0-100 overall pronunciation score |
 | `transcribe` | what the model actually heard (Wav2Vec2 CTC) |
-| `differences.errors[]` | one entry per mispronounced or missing word: `word`, `expected` (IPA), `actual` (IPA), `actual_word` |
+| `differences.errors[]` | one entry per mispronounced or missing word: `word`, `expected` (IPA), `actual` (IPA, what was really heard), `position` |
+| `differences.heard_phones`, `differences.expected_phones` | the phones recognized in the audio, and the phones expected for each word |
 | `differences.words_with_errors` | the words to work on |
 | `differences.phoneme_error_rate`, `differences.word_error_rate` | edited phonemes / expected phonemes, edited words / expected words |
 | `differences.expected_phonemes`, `differences.transcribed_phonemes` | full phoneme sequences |
@@ -54,7 +56,7 @@ pip install torch --index-url https://download.pytorch.org/whl/cpu   # CPU wheel
 pip install git+https://github.com/Halleck45/OpenPronounce.git
 ```
 
-The Wav2Vec2 model (`facebook/wav2vec2-large-960h`, ~1.2 GB) is downloaded from the Hugging Face Hub on first use.
+Two Wav2Vec2 checkpoints (~1.2 GB each) are downloaded from the Hugging Face Hub on first use: `facebook/wav2vec2-large-960h` (words) and `facebook/wav2vec2-lv-60-espeak-cv-ft` (phones). Set `OPENPRONOUNCE_PHONEME_MODEL=off` to skip the second one; word errors are then inferred from the transcription, which is less precise.
 
 ### Command line
 
@@ -118,11 +120,12 @@ streamlit run streamlit_app.py
 
 ## How it works
 
-1. **Reference**: the expected sentence is synthesized (gTTS) and both recordings are encoded with Wav2Vec2. The two embedding sequences are aligned with DTW; the mean per-frame distance is the `acoustic_distance`.
-2. **Transcription**: the learner's audio is transcribed with the Wav2Vec2 CTC head.
-3. **Phonemes**: expected text and transcription are phonemized (espeak-ng, IPA) word by word.
-4. **Alignment**: expected and heard phoneme sequences are aligned (edit-distance opcodes), and each expected word is compared with the phonemes it aligned to. A word whose phonemes differ by more than 40 % is reported, with what was heard instead.
-5. **Prosody**: F0 (pYIN) and RMS energy contours.
+1. **Phones**: a Wav2Vec2 model fine-tuned on espeak labels (`wav2vec2-lv-60-espeak-cv-ft`) recognizes the phones actually said, straight from the audio. No word-level language model gets a chance to "correct" the learner.
+2. **Expected phones**: the sentence is phonemized with espeak-ng (IPA), word by word. Both sequences are normalized (length marks dropped, reduced vowels merged, cot-caught merger, a few function words with alternate pronunciations).
+3. **Alignment**: expected and heard phones are aligned with edit-distance opcodes; each word is compared with the phones it aligned to and reported when half of them (or 3 or more) are wrong. Thresholds: `phones.PHONE_ERROR_THRESHOLD`, `phones.PHONE_ERROR_MIN_EDITS`.
+4. **Words**: the audio is also transcribed with `wav2vec2-large-960h` for the transcription and the word error rate.
+5. **Acoustics**: the sentence is synthesized (gTTS), both recordings are encoded with Wav2Vec2 and aligned with DTW; the mean per-frame distance is the `acoustic_distance`.
+6. **Prosody**: F0 (pYIN) and RMS energy contours.
 
 The approach is described in [this blog post](https://blog.lepine.pro/en/ai-wav2vec-pronunciation-vectorization/).
 
@@ -146,7 +149,7 @@ viseme.play(["həloʊ", "huː", "ɑːɹ", "juː"]);
 - English only for now (`en-us` phonemization, English Wav2Vec2). Swapping the model and the espeak language is the path to other languages.
 - The reference voice comes from gTTS, so the first analysis of a given sentence needs network access; references are cached afterwards.
 - Wav2Vec2 was trained on native read speech (LibriSpeech). Very strong accents, children's voices and noisy recordings degrade the transcription, and therefore the feedback.
-- Word-level errors depend on the ASR: a phoneme the model "corrects" while decoding will not be reported. This is a heuristic assessment, not a Goodness-of-Pronunciation model trained on annotated L2 speech.
+- The phone recognizer itself has an error rate (about 10 % of phones on a clean native reading of the bundled Harvard sentences); expect an occasional false alarm on short words. This is a heuristic assessment, not a Goodness-of-Pronunciation model trained on annotated L2 speech.
 
 ## Roadmap
 
@@ -155,7 +158,7 @@ Contributions welcome on any of these:
 - [ ] Publish on PyPI (`pip install openpronounce`)
 - [ ] Hosted demo (Hugging Face Space)
 - [ ] Offline TTS reference (piper / Kokoro) instead of gTTS
-- [ ] Phoneme-level model (`wav2vec2-lv-60-espeak-cv-ft` or similar) to report errors inside a word without relying on word transcription
+- [ ] Per-phone confidence (CTC posteriors) to grade errors instead of a yes/no per word
 - [ ] Other languages
 - [ ] Benchmark on a public L2 dataset (speechocean762) to calibrate the score
 - [ ] GPU support in the Docker image

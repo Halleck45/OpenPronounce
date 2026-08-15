@@ -25,6 +25,13 @@
 - Uploading a `.wav` to the API deleted the converted file before it was read.
 - The test suite referenced functions that did not exist and CI had been red since December 2025.
 
+### Added
+
+- Phone-level assessment: `wav2vec2-lv-60-espeak-cv-ft` recognizes the phones actually
+  said; `differences.errors` now shows, per word, the expected phones and the phones heard
+  (`openpronounce/phones.py`, `transcribe_phones`, `compare_phones`). Set
+  `OPENPRONOUNCE_PHONEME_MODEL=off` to fall back to the transcription-based detection.
+
 ### Changed
 
 - Models are loaded lazily on first use, and the CTC checkpoint's encoder is reused for

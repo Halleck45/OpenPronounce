@@ -10,6 +10,7 @@ Typical usage::
 """
 
 from .audio import load as load_audio, text2speech
+from .phones import compare_phones, transcribe_phones
 from .speech import (
     compare_audio_with_text,
     compare_transcriptions,
@@ -26,6 +27,8 @@ __all__ = [
     "text2speech",
     "compare_audio_with_text",
     "compare_transcriptions",
+    "compare_phones",
+    "transcribe_phones",
     "get_phonemes",
     "get_phonemes_with_word_mapping",
     "transcribe",

@@ -13,7 +13,7 @@ from phonemizer import phonemize
 from scipy.spatial.distance import euclidean
 from sklearn.preprocessing import MinMaxScaler
 
-from . import audio
+from . import audio, phones
 
 logger = logging.getLogger(__name__)
 
@@ -256,11 +256,7 @@ def compare_transcriptions(transcription, text_reference):
     word_error_rate = Levenshtein.distance(expected_words, transcribed_words) / max(1, len(expected_words))
     phoneme_error_rate = Levenshtein.distance(expected_phonemes, transcribed_phonemes) / max(1, len(expected_phonemes))
 
-    feedback = "🔊 Feedback on your pronunciation:\n"
-    if words_with_errors:
-        feedback += "❌ You need to better pronounce these words: " + ", ".join(words_with_errors) + "\n"
-    else:
-        feedback += "✅ Your pronunciation is excellent! 🎉\n"
+    feedback = _feedback(words_with_errors)
 
     expected_vector, transcribed_vector = align_sequences_dtw(expected_seq.tolist(), transcribed_seq.tolist())
 
@@ -278,6 +274,15 @@ def compare_transcriptions(transcription, text_reference):
         "transcribed_phonemes": transcribed_phonemes,
         "words_with_errors": words_with_errors,
     }
+
+
+def _feedback(words_with_errors):
+    feedback = "🔊 Feedback on your pronunciation:\n"
+    if words_with_errors:
+        feedback += "❌ You need to better pronounce these words: " + ", ".join(words_with_errors) + "\n"
+    else:
+        feedback += "✅ Your pronunciation is excellent! 🎉\n"
+    return feedback
 
 
 def align_sequences_dtw(seq1, seq2):
@@ -328,13 +333,21 @@ def compute_pronunciation_score(acoustic_distance, phoneme_error_rate, word_erro
     return round(clip(final_score), 2)
 
 
-def compare_audio_with_text(audio_1, text_reference, sampling_rate=SAMPLING_RATE):
+def compare_audio_with_text(audio_1, text_reference, sampling_rate=SAMPLING_RATE, use_phone_model=None):
     """Assess how well ``audio_1`` (16 kHz mono waveform) pronounces ``text_reference``.
 
     Returns a JSON-serializable dict with ``score`` (0-100), ``distance``,
     ``differences`` (per-word errors, phonemes, feedback), ``transcribe`` and
     ``prosody`` (``f0`` and ``energy`` contours).
+
+    When the phone recognizer is enabled (default, see :mod:`openpronounce.phones`),
+    ``differences.errors`` and ``differences.phoneme_error_rate`` come from phones
+    recognized directly in the audio; otherwise they are derived from the word
+    transcription.
     """
+    if use_phone_model is None:
+        use_phone_model = phones.is_enabled()
+
     emb_1 = extract_embeddings(audio_1, sampling_rate)
 
     reference_file = audio.text2speech(text_reference)
@@ -347,6 +360,18 @@ def compare_audio_with_text(audio_1, text_reference, sampling_rate=SAMPLING_RATE
 
     transcription = transcribe(audio_1)
     differences = compare_transcriptions(transcription, text_reference)
+
+    if use_phone_model:
+        heard = phones.transcribe_phones(audio_1, sampling_rate)
+        phone_result = phones.compare_phones(heard, text_reference)
+        differences.update({
+            "errors": phone_result["errors"],
+            "words_with_errors": phone_result["words_with_errors"],
+            "phoneme_error_rate": phone_result["phone_error_rate"],
+            "expected_phones": phone_result["expected_phones"],
+            "heard_phones": phone_result["heard_phones"],
+            "feedback": _feedback(phone_result["words_with_errors"]),
+        })
 
     score = compute_pronunciation_score(
         acoustic_distance, differences["phoneme_error_rate"], differences["word_error_rate"]
