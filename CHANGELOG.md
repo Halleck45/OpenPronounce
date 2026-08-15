@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0 (unreleased)
+## 0.3.0 (2026-08-15)
 
 - Added: multi-language support (fr, es, de, it, pt, nl), `lang` parameter everywhere (`--lang` on the CLI, `lang` form field on the API), `GET /languages`. English stays the default and behaves as before.
 - Changed: web demo redesigned (single column, language selector, word chips with per-phone highlighting and confidence, collapsed charts, clear error and loading states).
