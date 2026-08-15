@@ -8,6 +8,7 @@
 - Added: CUDA support (`OPENPRONOUNCE_DEVICE`, automatic when available) and `Dockerfile.gpu`.
 - Fixed: sentences that espeak merges into one token ("would have to") lost all expected phones, so no word could be flagged and the phone error rate exploded (17 % of speechocean762 utterances).
 - Added: `benchmarks/speechocean762.py`, benchmark of the score against human ratings.
+- Changed: word-level mispronunciation detection uses the CTC posteriors of the phone recognizer. `errors[]` entries gain `confidence` (0-1) and `phones[]` (`expected`, `heard`, `confidence` per phone), `differences.heard_phones_confidence` is added; `transcribe_phones(..., return_confidence=True)` and `recognize_phones()` expose the confidences. Close substitutions and word-final slips count less, and an expected phone the recognizer found plausible is not an error. On speechocean762 the precision of the flagged words goes from 0.12 to 0.20 (F1 0.21 to 0.31, one word in five flagged instead of two in five). Also fixed a few normalization gaps (Mandarin tone numbers, aspirated stops, `ɔɹ`/`oɹ` and `ɜ`/`ɚ` merges).
 - Added: offline TTS backends (Piper, Kokoro), `OPENPRONOUNCE_TTS` env var, `OPENPRONOUNCE_TTS_VOICE` / `voice=` to pick the voice. `pip install openpronounce[tts-piper]` or `[tts-kokoro]`.
 
 ## 0.2.1 (2026-08-15)

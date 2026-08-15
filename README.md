@@ -37,8 +37,8 @@ For each recording, a JSON-serializable dict:
 |---|---|
 | `score` | 0-100 overall pronunciation score |
 | `transcribe` | what the model actually heard (Wav2Vec2 CTC) |
-| `differences.errors[]` | one entry per mispronounced or missing word: `word`, `expected` (IPA), `actual` (IPA, what was really heard), `position` |
-| `differences.heard_phones`, `differences.expected_phones` | the phones recognized in the audio, and the phones expected for each word |
+| `differences.errors[]` | one entry per mispronounced or missing word: `word`, `expected` (IPA), `actual` (IPA, what was really heard), `position`, `confidence` (0-1, how sure we are the word is wrong) and `phones[]` (`expected`, `heard`, `confidence` per phone, to highlight the wrong one) |
+| `differences.heard_phones`, `differences.heard_phones_confidence`, `differences.expected_phones` | the phones recognized in the audio with their posterior (0-1), and the phones expected for each word |
 | `differences.words_with_errors` | the words to work on |
 | `differences.phoneme_error_rate`, `differences.word_error_rate` | edited phonemes / expected phonemes, edited words / expected words |
 | `differences.expected_phonemes`, `differences.transcribed_phonemes` | full phoneme sequences |
@@ -128,7 +128,7 @@ Interactive docs at `/docs` (Swagger UI).
 
 1. **Phones**: a Wav2Vec2 model fine-tuned on espeak labels (`wav2vec2-lv-60-espeak-cv-ft`) recognizes the phones actually said, straight from the audio. No word-level language model gets a chance to "correct" the learner.
 2. **Expected phones**: the sentence is phonemized with espeak-ng (IPA) in the selected language, word by word. Both sequences are normalized (length marks dropped, repetitions collapsed; for English also reduced vowels merged, cot-caught merger, a few function words with alternate pronunciations).
-3. **Alignment**: expected and heard phones are aligned with edit-distance opcodes; each word is compared with the phones it aligned to and reported when half of them (or 3 or more) are wrong. Thresholds: `phones.PHONE_ERROR_THRESHOLD`, `phones.PHONE_ERROR_MIN_EDITS`.
+3. **Alignment and confidence**: expected and heard phones are aligned with edit-distance opcodes and each word is compared with the phones it aligned to. Every wrong phone gets an error confidence from the CTC posteriors: 1 for a clear substitution, deletion or insertion, half for a close substitution (voicing, tense/lax vowel...), less for a dropped or extra phone at the end of a word, and scaled down (Goodness-of-Pronunciation style) when the expected phone was itself plausible in the frames where it should have been. A word is reported when these confidences add up to 40 % of its phones or to 2 phones. Constants: `phones.PHONE_ERROR_THRESHOLD`, `phones.PHONE_ERROR_MIN_EDITS`, `phones.NEAR_PHONE_COST`, `phones.PHONE_PLAUSIBLE_POSTERIOR`; calibration in [benchmarks/README.md](benchmarks/README.md#word-level-detection).
 4. **Words**: the audio is also transcribed with `wav2vec2-large-960h` (English) or a language-specific XLSR checkpoint for the transcription and the word error rate.
 5. **Acoustics**: the sentence is synthesized (see [Reference voice](#reference-voice)), both recordings are encoded with Wav2Vec2 and aligned with DTW; the mean per-frame distance is the `acoustic_distance`.
 6. **Prosody**: F0 (pYIN) and RMS energy contours.
@@ -169,7 +169,7 @@ viseme.play(["həloʊ", "huː", "ɑːɹ", "juː"]);
 - Only English is calibrated. Other languages reuse the English thresholds and score weights, the acoustic embeddings always come from the English checkpoint, and their word transcription relies on community XLSR models.
 - With the default gTTS reference voice, the first analysis of a given sentence needs network access (references are cached afterwards). Set `OPENPRONOUNCE_TTS=piper` or `kokoro` for a fully offline setup, see [Reference voice](#reference-voice).
 - Wav2Vec2 was trained on native read speech (LibriSpeech). Very strong accents, children's voices and noisy recordings degrade the transcription, and therefore the feedback.
-- The phone recognizer itself has an error rate (about 10 % of phones on a clean native reading of the bundled Harvard sentences); expect an occasional false alarm on short words. This is a heuristic assessment, not a Goodness-of-Pronunciation model trained on annotated L2 speech.
+- The phone recognizer itself has an error rate (about 10 % of phones on a clean native reading of the bundled Harvard sentences); expect an occasional false alarm on short words. On speechocean762 (Mandarin learners, many children) one flagged word in five is rated as mispronounced by the human raters, for seven in ten of the words they reject; the rest are accent traits the raters accept, alignment slips on short function words and recognizer errors. This is a heuristic assessment calibrated on that corpus, not a Goodness-of-Pronunciation model trained on annotated L2 speech.
 
 ## Roadmap
 
@@ -178,7 +178,7 @@ Contributions welcome on any of these:
 - [x] Publish on PyPI (`pip install openpronounce`)
 - [ ] Hosted demo (Docker image is ready, `scripts/sync_space.sh` pushes it to a Hugging Face Space)
 - [x] Offline TTS reference (Piper / Kokoro), `OPENPRONOUNCE_TTS`
-- [ ] Per-phone confidence (CTC posteriors) to grade errors instead of a yes/no per word
+- [x] Per-phone confidence (CTC posteriors) to grade errors instead of a yes/no per word
 - [x] Other languages (fr, es, de, it, pt, nl, experimental)
 - [ ] Benchmark on a public L2 dataset (speechocean762) to calibrate the score
 - [x] GPU support (`Dockerfile.gpu`, `OPENPRONOUNCE_DEVICE`)
