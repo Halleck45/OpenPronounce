@@ -7,6 +7,7 @@
 
 <p align="center">
   <a href="https://colab.research.google.com/github/Halleck45/OpenPronounce/blob/main/OpenPronounce-demo.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open in Colab"></a>
+  <a href="https://pypi.org/project/openpronounce/"><img src="https://img.shields.io/pypi/v/openpronounce.svg" alt="PyPI"></a>
   <a href="https://github.com/Halleck45/OpenPronounce/actions/workflows/tests.yml"><img src="https://github.com/Halleck45/OpenPronounce/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="https://github.com/sponsors/Halleck45"><img src="https://img.shields.io/static/v1?label=Sponsor&message=%E2%9D%A4&logo=GitHub&color=%23fe8e86" alt="Sponsor"></a>
@@ -53,7 +54,7 @@ Requires Python 3.10+, `ffmpeg` and `espeak-ng` on the system (`apt install ffmp
 
 ```bash
 pip install torch --index-url https://download.pytorch.org/whl/cpu   # CPU wheels, much smaller
-pip install git+https://github.com/Halleck45/OpenPronounce.git
+pip install openpronounce
 ```
 
 Two Wav2Vec2 checkpoints (~1.2 GB each) are downloaded from the Hugging Face Hub on first use: `facebook/wav2vec2-large-960h` (words) and `facebook/wav2vec2-lv-60-espeak-cv-ft` (phones). Set `OPENPRONOUNCE_PHONEME_MODEL=off` to skip the second one; word errors are then inferred from the transcription, which is less precise.
@@ -91,7 +92,7 @@ docker run -p 8000:8000 openpronounce
 ### Web application (FastAPI)
 
 ```bash
-pip install "openpronounce[app] @ git+https://github.com/Halleck45/OpenPronounce.git"
+pip install "openpronounce[app]"
 git clone https://github.com/Halleck45/OpenPronounce.git && cd OpenPronounce
 uvicorn server:app --host 0.0.0.0 --port 8000
 ```
@@ -155,8 +156,8 @@ viseme.play(["həloʊ", "huː", "ɑːɹ", "juː"]);
 
 Contributions welcome on any of these:
 
-- [ ] Publish on PyPI (`pip install openpronounce`)
-- [ ] Hosted demo (Hugging Face Space)
+- [x] Publish on PyPI (`pip install openpronounce`)
+- [ ] Hosted demo (Docker image is ready, `scripts/sync_space.sh` pushes it to a Hugging Face Space)
 - [ ] Offline TTS reference (piper / Kokoro) instead of gTTS
 - [ ] Per-phone confidence (CTC posteriors) to grade errors instead of a yes/no per word
 - [ ] Other languages

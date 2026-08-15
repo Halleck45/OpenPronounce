@@ -11,3 +11,5 @@ htmlcov/
 reference.mp3
 reference.wav
 test_env
+.env
+.env.*

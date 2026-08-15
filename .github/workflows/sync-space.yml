@@ -1,0 +1,30 @@
+name: Sync Hugging Face Space
+
+# Needs a repository secret HF_TOKEN (write access) at
+# https://github.com/Halleck45/OpenPronounce/settings/secrets/actions
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "openpronounce/**"
+      - "server.py"
+      - "templates/**"
+      - "static/**"
+      - "Dockerfile"
+      - "pyproject.toml"
+      - "docs/space-README.md"
+      - "scripts/sync_space.sh"
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install "huggingface_hub[cli]"
+      - run: scripts/sync_space.sh Halleck45/OpenPronounce
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
