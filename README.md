@@ -125,7 +125,7 @@ streamlit run streamlit_app.py
 2. **Expected phones**: the sentence is phonemized with espeak-ng (IPA), word by word. Both sequences are normalized (length marks dropped, reduced vowels merged, cot-caught merger, a few function words with alternate pronunciations).
 3. **Alignment**: expected and heard phones are aligned with edit-distance opcodes; each word is compared with the phones it aligned to and reported when half of them (or 3 or more) are wrong. Thresholds: `phones.PHONE_ERROR_THRESHOLD`, `phones.PHONE_ERROR_MIN_EDITS`.
 4. **Words**: the audio is also transcribed with `wav2vec2-large-960h` for the transcription and the word error rate.
-5. **Acoustics**: the sentence is synthesized (gTTS), both recordings are encoded with Wav2Vec2 and aligned with DTW; the mean per-frame distance is the `acoustic_distance`.
+5. **Acoustics**: the sentence is synthesized (see [Reference voice](#reference-voice)), both recordings are encoded with Wav2Vec2 and aligned with DTW; the mean per-frame distance is the `acoustic_distance`.
 6. **Prosody**: F0 (pYIN) and RMS energy contours.
 
 The approach is described in [this blog post](https://blog.lepine.pro/en/ai-wav2vec-pronunciation-vectorization/).
@@ -134,6 +134,20 @@ The approach is described in [this blog post](https://blog.lepine.pro/en/ai-wav2
 
 `score = 0.2 × acoustic + 0.5 × (1 − phoneme error rate) + 0.3 × (1 − word error rate)`, each term clipped to [0, 100].
 The acoustic term maps the mean DTW distance linearly from 5 (100) to 15 (0); these bounds come from the bundled samples (`assets/`) and are exposed as `speech.ACOUSTIC_DISTANCE_GOOD` / `speech.ACOUSTIC_DISTANCE_BAD` if you want to recalibrate on your own data. All three terms are length-independent, so a long paragraph and a two-word sentence are scored on the same scale.
+
+### Reference voice
+
+The acoustic term needs a native reading of the expected sentence: it is synthesized once per sentence, encoded with Wav2Vec2 like the learner's recording, and cached under `$OPENPRONOUNCE_CACHE_DIR` (system temp dir by default). Three synthesizers are available, chosen with the `OPENPRONOUNCE_TTS` environment variable (or `audio.text2speech(..., backend=...)`):
+
+| `OPENPRONOUNCE_TTS` | Engine | Install | Offline | Download |
+|---|---|---|---|---|
+| `gtts` (default) | Google Translate TTS | included | no: network on the first analysis of each sentence, cached afterwards | none |
+| `piper` | [Piper](https://github.com/OHF-Voice/piper1-gpl) (VITS, ONNX, CPU) | `pip install openpronounce[tts-piper]` | yes, after the first voice download | ~60 MB per medium voice, from `rhasspy/piper-voices` |
+| `kokoro` | [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) (PyTorch) | `pip install openpronounce[tts-kokoro]` | yes, after the first model download | ~330 MB model + a few MB per voice (+ the spaCy `en_core_web_sm` model, fetched on first use for English) |
+
+`OPENPRONOUNCE_TTS_VOICE` (or `voice=`) selects the voice: a Piper voice id such as `en_US-lessac-medium` (default) or `en_GB-cori-medium`, a Kokoro voice such as `af_heart` (default) or `bf_emma`, or, for gTTS, the Google domain that sets the accent (`com`, `co.uk`, `com.au`). Piper and Kokoro ship a default voice for the languages they cover (`openpronounce.tts.PIPER_DEFAULT_VOICES`, `openpronounce.tts.KOKORO_LANGUAGES`); models and voices land in the Hugging Face cache (`$HF_HOME`), so `HF_HUB_OFFLINE=1` works once they are there. The reference cache is keyed by backend and voice, so switching engines does not serve stale references.
+
+For self-hosting we recommend Piper: no network at all, small, fast on CPU, and no PyTorch model to load next to Wav2Vec2. Kokoro sounds more natural but costs ~330 MB and a few seconds of warm-up. On the bundled samples the acoustic distance stays on the gTTS scale with Kokoro (6.2 / 11.6 / 10.3 for `developer.wav`, `developer1.wav`, `harvard.wav` versus 6.3 / 11.4 / 10.1 with gTTS) and shifts up by 1 to 2 with Piper on good readings (8.2 / 11.9 / 11.0), which lowers the acoustic term slightly (a 20 % weight in the score) until it is recalibrated for that engine.
 
 ## Visemes
 
@@ -148,7 +162,7 @@ viseme.play(["həloʊ", "huː", "ɑːɹ", "juː"]);
 ## Limitations
 
 - English only for now (`en-us` phonemization, English Wav2Vec2). Swapping the model and the espeak language is the path to other languages.
-- The reference voice comes from gTTS, so the first analysis of a given sentence needs network access; references are cached afterwards.
+- With the default gTTS reference voice, the first analysis of a given sentence needs network access (references are cached afterwards). Set `OPENPRONOUNCE_TTS=piper` or `kokoro` for a fully offline setup, see [Reference voice](#reference-voice).
 - Wav2Vec2 was trained on native read speech (LibriSpeech). Very strong accents, children's voices and noisy recordings degrade the transcription, and therefore the feedback.
 - The phone recognizer itself has an error rate (about 10 % of phones on a clean native reading of the bundled Harvard sentences); expect an occasional false alarm on short words. This is a heuristic assessment, not a Goodness-of-Pronunciation model trained on annotated L2 speech.
 
@@ -158,7 +172,7 @@ Contributions welcome on any of these:
 
 - [x] Publish on PyPI (`pip install openpronounce`)
 - [ ] Hosted demo (Docker image is ready, `scripts/sync_space.sh` pushes it to a Hugging Face Space)
-- [ ] Offline TTS reference (piper / Kokoro) instead of gTTS
+- [x] Offline TTS reference (Piper / Kokoro), `OPENPRONOUNCE_TTS`
 - [ ] Per-phone confidence (CTC posteriors) to grade errors instead of a yes/no per word
 - [ ] Other languages
 - [ ] Benchmark on a public L2 dataset (speechocean762) to calibrate the score

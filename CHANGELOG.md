@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.0 (unreleased)
+
+- Added: offline TTS backends (Piper, Kokoro), `OPENPRONOUNCE_TTS` env var, `OPENPRONOUNCE_TTS_VOICE` / `voice=` to pick the voice. `pip install openpronounce[tts-piper]` or `[tts-kokoro]`.
+
 ## 0.2.1 (2026-08-15)
 
 - Install from PyPI in the docs and the notebook.

@@ -7,7 +7,8 @@ import tempfile
 
 import librosa
 import soundfile as sf
-from gtts import gTTS
+
+from openpronounce import tts
 
 logger = logging.getLogger(__name__)
 
@@ -46,30 +47,29 @@ def webm2wav(file_path):
 webp2wav = webm2wav
 
 
-def text2speech(text, lang="en", filename=None, target_sr=TARGET_SR):
+def text2speech(text, lang="en", filename=None, target_sr=TARGET_SR, *, backend=None, voice=None):
     """Generate a reference pronunciation of ``text`` as a 16 kHz mono wav file and return its path.
 
-    Uses gTTS (Google Translate TTS), so an internet connection is required the first
-    time a given text is requested. Results are cached in ``CACHE_DIR`` keyed by
-    ``(lang, text)`` so that repeated comparisons against the same sentence are free.
+    The synthesizer is chosen with ``backend`` (``gtts``, ``piper`` or ``kokoro``), falling
+    back to the ``OPENPRONOUNCE_TTS`` environment variable, then to gTTS; the voice with
+    ``voice`` / ``OPENPRONOUNCE_TTS_VOICE``, then to a per-language default. See
+    :mod:`openpronounce.tts`. Results are cached in ``CACHE_DIR`` keyed by
+    ``(backend, voice, lang, text)`` so that repeated comparisons against the same
+    sentence are free.
     """
+    backend, voice = tts.resolve(lang, backend=backend, voice=voice)
     if filename is None:
         os.makedirs(CACHE_DIR, exist_ok=True)
-        key = hashlib.sha1(f"{lang}\x00{target_sr}\x00{text}".encode("utf-8")).hexdigest()
+        key = hashlib.sha1(
+            f"{backend}\x00{voice}\x00{lang}\x00{target_sr}\x00{text}".encode("utf-8")
+        ).hexdigest()
         filename = os.path.join(CACHE_DIR, f"tts-{key}.wav")
         if os.path.exists(filename):
             return filename
 
-    fd, mp3_path = tempfile.mkstemp(suffix=".mp3", prefix="openpronounce-tts-")
-    os.close(fd)
-    try:
-        gTTS(text=text, lang=lang, slow=False).save(mp3_path)
-        waveform = load(mp3_path, sr=target_sr)
-    finally:
-        try:
-            os.remove(mp3_path)
-        except OSError:
-            pass
-
+    logger.info("Synthesizing reference with %s (voice %s, lang %s)", backend, voice, lang)
+    waveform, sr = tts.synthesize(text, lang, backend, voice)
+    if sr != target_sr:
+        waveform = librosa.resample(waveform, orig_sr=sr, target_sr=target_sr)
     sf.write(filename, waveform, target_sr)
     return filename
