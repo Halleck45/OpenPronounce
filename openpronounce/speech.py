@@ -14,6 +14,7 @@ from scipy.spatial.distance import euclidean
 from sklearn.preprocessing import MinMaxScaler
 
 from . import audio, phones
+from .languages import DEFAULT_LANGUAGE, get_language
 
 logger = logging.getLogger(__name__)
 
@@ -29,32 +30,33 @@ WORD_ERROR_THRESHOLD = 0.4
 # Models (loaded lazily, once)
 # ---------------------------------------------------------------------------
 
-@lru_cache(maxsize=1)
-def _load_models():
-    """Load the Wav2Vec2 processor and CTC model on first use.
+@lru_cache(maxsize=None)
+def _load_models(model_name=MODEL_NAME):
+    """Load a Wav2Vec2 processor and CTC model on first use (cached per checkpoint).
 
     ``Wav2Vec2ForCTC`` embeds a ``Wav2Vec2Model`` (``.wav2vec2``), so a single
     checkpoint serves both transcription (CTC head) and embedding extraction.
     """
     from transformers import Wav2Vec2ForCTC, Wav2Vec2Processor
 
-    logger.info("Loading %s", MODEL_NAME)
-    processor = Wav2Vec2Processor.from_pretrained(MODEL_NAME)
-    model_ctc = Wav2Vec2ForCTC.from_pretrained(MODEL_NAME)
+    logger.info("Loading %s", model_name)
+    processor = Wav2Vec2Processor.from_pretrained(model_name)
+    model_ctc = Wav2Vec2ForCTC.from_pretrained(model_name)
     model_ctc.eval()
     return processor, model_ctc
 
 
-def _get_processor():
-    return _load_models()[0]
+def _get_processor(lang=DEFAULT_LANGUAGE):
+    return _load_models(get_language(lang).asr_model)[0]
 
 
-def _get_model_ctc():
-    return _load_models()[1]
+def _get_model_ctc(lang=DEFAULT_LANGUAGE):
+    return _load_models(get_language(lang).asr_model)[1]
 
 
 def _get_model():
-    return _load_models()[1].wav2vec2
+    """Embedding extractor: always the English checkpoint, whatever the language."""
+    return _load_models(MODEL_NAME)[1].wav2vec2
 
 
 # ---------------------------------------------------------------------------
@@ -74,12 +76,15 @@ def extract_embeddings(audio_waveform, sampling_rate=SAMPLING_RATE):
     return features.squeeze(0).numpy()
 
 
-def transcribe(audio_waveform):
-    """Transcribe a 16 kHz waveform into (upper-case) text with Wav2Vec2 CTC."""
-    processor = _get_processor()
+def transcribe(audio_waveform, lang=DEFAULT_LANGUAGE):
+    """Transcribe a 16 kHz waveform into text with the Wav2Vec2 CTC model of ``lang``.
+
+    The English model emits upper-case text; the other checkpoints emit lower-case.
+    """
+    processor = _get_processor(lang)
     inputs = processor(audio_waveform, sampling_rate=SAMPLING_RATE, return_tensors="pt", padding=True)
     with torch.no_grad():
-        logits = _get_model_ctc()(inputs.input_values).logits
+        logits = _get_model_ctc(lang)(inputs.input_values).logits
     predicted_ids = torch.argmax(logits, dim=-1)
     return processor.batch_decode(predicted_ids)[0]
 
@@ -105,34 +110,35 @@ def _words(text):
 
 
 @lru_cache(maxsize=4096)
-def _phonemize_word(word):
+def _phonemize_word(word, lang=DEFAULT_LANGUAGE):
     """Return the IPA phonemes of a single word (espeak first, festival as fallback).
 
     The word is lower-cased first: espeak spells upper-case words letter by letter
     ("IT" -> /aɪtiː/), which would flag every word of an upper-case sentence as wrong.
     """
     word = word.lower()
+    language = get_language(lang).espeak
     for backend in ("espeak", "festival"):
         try:
             return tuple(
-                phonemize(word, language="en-us", backend=backend, strip=True, preserve_punctuation=False).split()
+                phonemize(word, language=language, backend=backend, strip=True, preserve_punctuation=False).split()
             )
         except Exception as e:  # noqa: BLE001 - try the next backend
             logger.debug("phonemize(%r) failed with %s: %s", word, backend, e)
     return ()
 
 
-def get_phonemes(text):
+def get_phonemes(text, lang=DEFAULT_LANGUAGE):
     """Return the flat list of phonemes for ``text``."""
-    return get_phonemes_with_word_mapping(text)[0]
+    return get_phonemes_with_word_mapping(text, lang)[0]
 
 
-def get_phonemes_with_word_mapping(text):
+def get_phonemes_with_word_mapping(text, lang=DEFAULT_LANGUAGE):
     """Return ``(phonemes, phoneme_to_word)`` where ``phoneme_to_word[i]`` is the word phoneme ``i`` belongs to."""
     phonemes = []
     phoneme_to_word = {}
     for word in _words(text):
-        for phoneme in _phonemize_word(word):
+        for phoneme in _phonemize_word(word, lang):
             phoneme_to_word[len(phonemes)] = word
             phonemes.append(phoneme)
     return phonemes, phoneme_to_word
@@ -177,7 +183,7 @@ def _align_phoneme_indices(expected_phonemes, transcribed_phonemes):
     return alignment_map
 
 
-def compare_transcriptions(transcription, text_reference):
+def compare_transcriptions(transcription, text_reference, lang=DEFAULT_LANGUAGE):
     """Compare an automatic transcription with the expected text, word by word.
 
     Returns a JSON-serializable dict with distances, per-word errors and feedback.
@@ -187,8 +193,8 @@ def compare_transcriptions(transcription, text_reference):
 
     word_distance = Levenshtein.distance(transcription_clean, reference_clean)
 
-    expected_phonemes, _ = get_phonemes_with_word_mapping(text_reference)
-    transcribed_phonemes, transcribed_map = get_phonemes_with_word_mapping(transcription_clean)
+    expected_phonemes, _ = get_phonemes_with_word_mapping(text_reference, lang)
+    transcribed_phonemes, transcribed_map = get_phonemes_with_word_mapping(transcription_clean, lang)
 
     # Global phoneme distance (DTW on codepoints, kept for the score and the charts)
     expected_seq = get_phoneme_embeddings(" ".join(expected_phonemes))
@@ -205,7 +211,7 @@ def compare_transcriptions(transcription, text_reference):
     current_phoneme_idx = 0
 
     for word in _words(text_reference):
-        word_phonemes = _phonemize_word(word)
+        word_phonemes = _phonemize_word(word, lang)
         if not word_phonemes:
             continue
 
@@ -333,12 +339,16 @@ def compute_pronunciation_score(acoustic_distance, phoneme_error_rate, word_erro
     return round(clip(final_score), 2)
 
 
-def compare_audio_with_text(audio_1, text_reference, sampling_rate=SAMPLING_RATE, use_phone_model=None):
+def compare_audio_with_text(audio_1, text_reference, sampling_rate=SAMPLING_RATE, use_phone_model=None,
+                            lang=DEFAULT_LANGUAGE):
     """Assess how well ``audio_1`` (16 kHz mono waveform) pronounces ``text_reference``.
 
+    ``lang`` selects the language (see :data:`openpronounce.languages.LANGUAGES`);
+    it drives the reference TTS voice, the phonemizer and the word transcription model.
+
     Returns a JSON-serializable dict with ``score`` (0-100), ``distance``,
-    ``differences`` (per-word errors, phonemes, feedback), ``transcribe`` and
-    ``prosody`` (``f0`` and ``energy`` contours).
+    ``differences`` (per-word errors, phonemes, feedback), ``transcribe``,
+    ``language`` and ``prosody`` (``f0`` and ``energy`` contours).
 
     When the phone recognizer is enabled (default, see :mod:`openpronounce.phones`),
     ``differences.errors`` and ``differences.phoneme_error_rate`` come from phones
@@ -347,10 +357,11 @@ def compare_audio_with_text(audio_1, text_reference, sampling_rate=SAMPLING_RATE
     """
     if use_phone_model is None:
         use_phone_model = phones.is_enabled()
+    lang = get_language(lang).code
 
     emb_1 = extract_embeddings(audio_1, sampling_rate)
 
-    reference_file = audio.text2speech(text_reference)
+    reference_file = audio.text2speech(text_reference, lang=lang)
     audio_2 = audio.load(reference_file, sr=sampling_rate)
     emb_2 = extract_embeddings(audio_2, sampling_rate)
 
@@ -358,12 +369,12 @@ def compare_audio_with_text(audio_1, text_reference, sampling_rate=SAMPLING_RATE
     acoustic_distance = distance / max(1, len(path))
     distance = int(distance)
 
-    transcription = transcribe(audio_1)
-    differences = compare_transcriptions(transcription, text_reference)
+    transcription = transcribe(audio_1, lang)
+    differences = compare_transcriptions(transcription, text_reference, lang)
 
     if use_phone_model:
-        heard = phones.transcribe_phones(audio_1, sampling_rate)
-        phone_result = phones.compare_phones(heard, text_reference)
+        heard = phones.transcribe_phones(audio_1, sampling_rate, lang=lang)
+        phone_result = phones.compare_phones(heard, text_reference, lang)
         differences.update({
             "errors": phone_result["errors"],
             "words_with_errors": phone_result["words_with_errors"],
@@ -387,6 +398,7 @@ def compare_audio_with_text(audio_1, text_reference, sampling_rate=SAMPLING_RATE
         "differences": differences,
         "feedback": differences["feedback"],
         "transcribe": differences["transcribe"],
+        "language": lang,
         "prosody": {
             "f0": f0.tolist(),
             "energy": energy.tolist(),
