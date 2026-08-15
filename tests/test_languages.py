@@ -39,7 +39,9 @@ class TestFrenchPhones(unittest.TestCase):
         self.assertNotEqual(groups, phones.get_expected_phones("bonjour le monde")[1])
 
     def test_normalization_is_language_aware(self):
-        self.assertEqual(phones.normalize_phones(["ɔ"], lang="fr"), ["ɔ"])
+        # French merges mid vowels (ɔ/o), English merges cot/caught (ɔ/ɑ)
+        self.assertEqual(phones.normalize_phones(["ɔ"], lang="fr"), ["o"])
+        self.assertEqual(phones.normalize_phones(["ɔ", "ɛ"], lang="de"), ["ɔ", "ɛ"])
         self.assertEqual(phones.normalize_phones(["ɔ"], lang="en"), ["ɑ"])
         self.assertEqual(phones.normalize_phones(["ɔ"]), ["ɑ"])
         self.assertEqual(phones.normalize_phones(["ɾ"], lang="es"), ["ɾ"])

@@ -393,7 +393,7 @@
             }
         });
 
-        renderScore(Math.round(data.score || 0), state.errorsByIndex.size, state.words.length);
+        renderScore(Math.round(data.score || 0), state.errorsByIndex.size, state.words.length, data.transcribe);
         renderChips();
         renderHeard(data);
 
@@ -416,7 +416,7 @@
         }
     }
 
-    function renderScore(score, flagged, total) {
+    function renderScore(score, flagged, total, transcribe) {
         const ring = $('score-ring');
         ring.style.stroke = score >= 80 ? COLORS.good : score >= 50 ? COLORS.mid : COLORS.bad;
         ring.style.strokeDashoffset = RING_LENGTH;
@@ -430,6 +430,11 @@
         if (total === 0) {
             verdict = 'Nothing to compare';
             sub = 'The sentence is empty.';
+        } else if (flagged === 0 && score < 70) {
+            verdict = 'No single word stands out';
+            sub = transcribe
+                ? `But the sentence as a whole was hard to follow: we heard "${String(transcribe).toLowerCase()}". Check that the recording started before you spoke.`
+                : 'But the sentence as a whole was hard to follow.';
         } else if (flagged === 0) {
             verdict = 'Every word came through clearly';
             sub = 'Tap a word to see its sounds anyway.';

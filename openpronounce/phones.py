@@ -63,12 +63,24 @@ _PHONE_MAP = {
         "ɾ": "t",   # flapped t
         "ɫ": "l",
     },
+    "fr": {
+        # Mid-vowel pairs whose distribution follows the "loi de position": speakers
+        # and the recognizer swap them freely, learners should not be penalised.
+        "ɛ": "e",
+        "œ": "ø",
+        "ə": "ø",
+        "ɔ": "o",
+    },
 }
 
 # Groups of phones close enough that substituting one for another is a minor error
 # (cost NEAR_PHONE_COST): voicing pairs, tense/lax vowels, dental fricatives said as
 # stops or sibilants, and other typical L2 approximations that raters accept.
 _NEAR_PHONES = {
+    "fr": [
+        {"e", "i"}, {"ø", "y"}, {"ø", "e"}, {"o", "u"}, {"ɑ̃", "ɔ̃"}, {"ɛ̃", "ɑ̃"}, {"ʁ", "r", "ɹ"},
+        {"b", "p"}, {"d", "t"}, {"ɡ", "k"}, {"z", "s"}, {"v", "f"}, {"ʒ", "ʃ"},
+    ],
     "en": [
         {"ɪ", "i"}, {"ʊ", "u"}, {"ɛ", "æ"}, {"ʌ", "ɑ", "ə", "a"}, {"æ", "a"}, {"ɛ", "eɪ"},
         {"ð", "z", "d"}, {"θ", "s", "t"}, {"b", "p"}, {"d", "t"}, {"ɡ", "k"}, {"z", "s"},

@@ -64,12 +64,16 @@ class AudioRecorder {
             this.emit('record:ready', { blob });
         };
 
+        // Only announce the recording once the recorder is really capturing: the first
+        // 100-300 ms after start() are lost otherwise, and users start talking on the click.
+        this.mediaRecorder.onstart = () => {
+            requestAnimationFrame(() => this.checkSilence());
+            this.maxTimer = setTimeout(() => this.stop(), this.maxDuration);
+            this.emit('record:start');
+        };
+
         this.started = true;
         this.mediaRecorder.start();
-        requestAnimationFrame(() => this.checkSilence());
-        this.maxTimer = setTimeout(() => this.stop(), this.maxDuration);
-
-        this.emit('record:start');
     }
 
     stop() {
