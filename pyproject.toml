@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openpronounce"
-version = "0.2.1"
+version = "0.3.0"
 description = "Open-source, phoneme-level English pronunciation assessment (Wav2Vec2 + DTW). Score a recording, list mispronounced words, get prosody curves."
 readme = "README.md"
 license = { text = "MIT" }
