@@ -69,6 +69,7 @@ packages = ["openpronounce"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 addopts = "-ra --tb=short --strict-markers --disable-warnings --durations=10"
 filterwarnings = [
     "ignore::UserWarning",

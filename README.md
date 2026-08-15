@@ -183,6 +183,12 @@ Tests do not need the network nor the model weights (model calls are mocked); es
 - [Azure Speech visemes](https://learn.microsoft.com/azure/ai-services/speech-service/how-to-speech-synthesis-viseme) and [SSML phonetic sets](https://learn.microsoft.com/azure/ai-services/speech-service/speech-ssml-phonetic-sets)
 - Mouth images: HumanBeanCMU39 viseme set
 
+## Support the project
+
+If OpenPronounce saved you time, a star goes a long way: it helps other developers and teachers discover the tool. And if it ends up in a product, [sponsoring](https://github.com/sponsors/Halleck45) helps me keep improving it.
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Halleck45/OpenPronounce&type=Date)](https://star-history.com/#Halleck45/OpenPronounce&Date)
+
 ## License
 
 MIT, see [LICENSE](LICENSE).
