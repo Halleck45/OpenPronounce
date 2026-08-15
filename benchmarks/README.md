@@ -132,3 +132,92 @@ bounds are not identified (anything from 4-7 / 15-20 gives the same result).
   fallback is advisable, since the PER weight would probably not stay at 0.1 with a
   working PER. The mean score also drops from 50 to 40 with the tuned weights and
   bounds 5/15 (51 with 5/18): the bounds shift the level, the weights the ranking.
+
+## Word-level detection
+
+`benchmarks/word_detection.py` calibrates the rule that flags a word as mispronounced,
+on the same 500-utterance sample. It runs the phone recognizer once (`--extract`, the
+frame posteriors are cached in `~/.cache/openpronounce/speechocean762/logits`), then
+tunes and reports without the model (`--tune`, `--report`), and checks the bundled
+samples (`--assets`). The 500 utterances are split by parity of their index: **250 for
+tuning (even), 250 held out (odd)**; the constants below were chosen on the tuning half only.
+
+### Rule (0.3.0)
+
+Every wrong phone of a word gets an error confidence in [0, 1]:
+
+- substitution: 1, or `NEAR_PHONE_COST = 0.5` when the two phones are close (voicing
+  pairs, tense/lax vowels, ð/z/d, θ/s/t, n/ŋ, h/x...);
+- deletion: 1, or `FINAL_DELETION_COST = 0.5` for the last phone of the word;
+- extra phone next to a correct one: 1, or `FINAL_EXTRA_COST = 0.25` after the last
+  phone of the word (epenthetic vowel, onset of the next word caught by the alignment);
+- the value is then scaled by `1 - min(1, p / PHONE_PLAUSIBLE_POSTERIOR)` where `p` is
+  the highest posterior of the expected phone in the frames it aligned to (its
+  neighbours' frames for a deletion) and `PHONE_PLAUSIBLE_POSTERIOR = 0.05`: an
+  expected phone the recognizer found plausible is not a confident error.
+
+A word is flagged when the confidences add up to `PHONE_ERROR_THRESHOLD = 0.4` of its
+phones or to `PHONE_ERROR_MIN_EDITS = 2` phones. Its `confidence` is
+`min(1, max(sum / phones, sum / 2))`. The 0.2.1 rule was: plain edit distance of at
+least 50 % of the phones or 3.
+
+The F1 surface on the tuning half is flat (0.305 to 0.321 for thresholds between 0.4
+and 0.7 and 2 to 3 minimum edits): 0.4 / 2 keeps recall (0.73 against 0.48 for the
+F1-optimal 0.65 / 2.5) and keeps the bundled examples flagged. The recognizer's own
+confidence in the heard phone (peak posterior) is not discriminative on this corpus
+(same distribution for confirmed and refuted alarms) and does not enter the rule; the
+posterior of the *expected* phone and the phone-pair costs carry the gain.
+
+### Results (2026-08-15, N = 500, 3,146 words)
+
+"bad" = human word accuracy < 5 (168 words, 5.3 %); "lenient" = accuracy < 7 (265
+words, 8.4 %). P@R.5 / P@R.7 = best precision reachable at recall >= 0.5 / 0.7 by
+moving the two thresholds of that system.
+
+| system | split | P | R | F1 | flagged | P@R.5 | P@R.7 |
+|---|---|--:|--:|--:|--:|--:|--:|
+| 0.2.1 (edit distance, exact old code) | tune | 0.119 | 0.939 | 0.211 | 41.9 % | | |
+| 0.2.1 (edit distance, exact old code) | held-out | 0.119 | 0.872 | 0.210 | 39.2 % | | |
+| 0.2.1 rule, new normalization | tune | 0.127 | 0.939 | 0.223 | 39.4 % | 0.161 | 0.161 |
+| 0.2.1 rule, new normalization | held-out | 0.126 | 0.860 | 0.221 | 36.5 % | 0.171 | 0.171 |
+| confidence rule, no posteriors | tune | 0.152 | 0.902 | 0.261 | 31.5 % | 0.206 | 0.173 |
+| confidence rule, no posteriors | held-out | 0.148 | 0.837 | 0.251 | 30.4 % | 0.198 | 0.168 |
+| **confidence rule + posteriors (default)** | tune | 0.194 | 0.732 | 0.307 | 20.0 % | 0.227 | 0.198 |
+| **confidence rule + posteriors (default)** | held-out | 0.201 | 0.721 | 0.314 | 19.3 % | 0.241 | 0.201 |
+
+Same, lenient label (accuracy < 7):
+
+| system | split | P | R | F1 | flagged | P@R.5 | P@R.7 |
+|---|---|--:|--:|--:|--:|--:|--:|
+| 0.2.1 (edit distance, exact old code) | tune | 0.179 | 0.866 | 0.297 | 41.9 % | | |
+| 0.2.1 (edit distance, exact old code) | held-out | 0.170 | 0.817 | 0.282 | 39.2 % | | |
+| 0.2.1 rule, new normalization | tune | 0.188 | 0.851 | 0.307 | 39.4 % | 0.232 | 0.232 |
+| 0.2.1 rule, new normalization | held-out | 0.181 | 0.809 | 0.296 | 36.5 % | 0.241 | 0.231 |
+| confidence rule, no posteriors | tune | 0.224 | 0.813 | 0.352 | 31.5 % | 0.285 | 0.262 |
+| confidence rule, no posteriors | held-out | 0.207 | 0.771 | 0.327 | 30.4 % | 0.301 | 0.262 |
+| **confidence rule + posteriors (default)** | tune | 0.269 | 0.619 | 0.375 | 20.0 % | 0.303 | 0.261 |
+| **confidence rule + posteriors (default)** | held-out | 0.269 | 0.634 | 0.377 | 19.3 % | 0.328 | 0.262 |
+
+"New normalization" = 0.2.1 thresholds on the plain edit distance, with the 0.3.0
+phone normalization (Mandarin tone numbers and aspiration marks dropped, `ɔɹ`/`oɹ`,
+`ɜ`/`ɚ` merged, `ai`/`ei`/`au`/`ou` spelled as diphthongs). "No posteriors" = the
+0.3.0 costs without the plausibility scaling (what a plain list of phones gives).
+
+Bundled samples (`--assets`), before -> after: `developer.wav` none -> none;
+`example.mp3` hello, how -> hello (0.89), how (0.50); `harvard.wav` beer, al -> none;
+`developer1.wav` i, developer -> developer (1.00).
+
+### Interpretation
+
+- Half of the false alarms went away (39 % of the words flagged -> 19 %) for a quarter
+  of the hits (recall 0.87 -> 0.72 on the held-out half); precision 0.12 -> 0.20 (0.17
+  -> 0.27 with the lenient label). Tuning and held-out halves agree within 0.01.
+- Precision stays low in absolute terms because the raters are lenient: 90 % of the
+  words are rated 10/10, accent traits such as ð -> z, θ -> s, ɪ -> i or a dropped
+  final consonant are almost never rated below 5, and 2-phone function words ("the",
+  "to", "it", "you") make up most of the remaining alarms. Among words with a given edit
+  count, no more than 25 % are rated bad, so an edit-count rule cannot go much further.
+- The recognizer's confidence in what it heard does not separate true from false
+  alarms; the posterior of the expected phone (GOP-like) and the phone-pair costs do.
+  Next steps: a phonetically weighted alignment (the costs inside the DP, not only after
+  it), and a small classifier on the per-word features against the human labels.
