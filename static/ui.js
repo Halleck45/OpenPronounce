@@ -85,6 +85,7 @@
         document.addEventListener('record:start', onRecordStart);
         document.addEventListener('record:stop', onRecordStop);
         document.addEventListener('record:silence', () => silenceSound.play().catch(() => { }));
+        document.addEventListener('record:devicefallback', onMicFallback);
         document.addEventListener('record:ready', (e) => {
             setAudio(e.detail.blob, 'recording.webm', false);
             analyze();
@@ -407,6 +408,13 @@
             hideMicMenu();
         });
         return item;
+    }
+
+    function onMicFallback() {
+        // The stored device is gone: forget it so the next recording asks for the default directly
+        state.micId = null;
+        localStorage.removeItem(MIC_STORAGE_KEY);
+        updateMicLabel();
     }
 
     function updateMicLabel() {

@@ -6,6 +6,7 @@
  *   record:stop           recording ended (user, timeout or silence)
  *   record:silence        recording ended because of silence
  *   record:ready          detail: { blob }  the webm blob is available
+ *   record:devicefallback the chosen microphone is gone, the system default was used
  *   record:error          detail: { reason } one of "insecure", "denied", "notfound", "unknown"
  */
 class AudioRecorder {
@@ -73,6 +74,7 @@ class AudioRecorder {
                     this.emitRecordError(retryErr);
                     return;
                 }
+                this.emit('record:devicefallback');
             } else {
                 this.emitRecordError(err);
                 return;
