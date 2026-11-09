@@ -98,8 +98,9 @@ class AudioRecorder {
         this.mediaRecorder.onstart = () => {
             if (this.silenceDetection) {
                 requestAnimationFrame(() => this.checkSilence());
-                this.maxTimer = setTimeout(() => this.stop(), this.maxDuration);
             }
+            // The cap applies even without auto-stop, so a forgotten recording ends
+            this.maxTimer = setTimeout(() => this.stop(), this.maxDuration);
             this.emit('record:start');
         };
 
