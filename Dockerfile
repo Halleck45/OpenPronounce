@@ -19,6 +19,10 @@ RUN apt-get update \
 
 WORKDIR /app
 
+# The bundled pip is too old to resolve the app extras (ResolutionImpossible on
+# uvicorn[standard], see issue #11).
+RUN python -m pip install --upgrade pip
+
 # CPU wheels of torch are much smaller than the default CUDA ones.
 RUN pip install torch --index-url https://download.pytorch.org/whl/cpu
 
