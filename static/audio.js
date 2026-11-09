@@ -6,10 +6,11 @@
  *   record:stop           recording ended (user, timeout or silence)
  *   record:silence        recording ended because of silence
  *   record:ready          detail: { blob }  the webm blob is available
+ *   record:devicefallback the chosen microphone is gone, the system default was used
  *   record:error          detail: { reason } one of "insecure", "denied", "notfound", "unknown"
  */
 class AudioRecorder {
-    constructor({ silenceThreshold = 50, silenceDuration = 2000, maxDuration = 60000 } = {}) {
+    constructor({ silenceThreshold = 50, silenceDuration = 2000, maxDuration = 60000, deviceId = null, silenceDetection = true } = {}) {
         this.mediaRecorder = null;
         this.stream = null;
         this.audioContext = null;
@@ -20,11 +21,33 @@ class AudioRecorder {
         this.silenceThreshold = silenceThreshold;
         this.silenceDuration = silenceDuration;
         this.maxDuration = maxDuration;
+        this.deviceId = deviceId;
+        this.silenceDetection = silenceDetection;
         this.started = false;
     }
 
     static isSupported() {
         return Boolean(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+    }
+
+    setDeviceId(deviceId) {
+        this.deviceId = deviceId || null;
+    }
+
+    setSilenceDetection(enabled) {
+        this.silenceDetection = Boolean(enabled);
+    }
+
+    audioConstraints() {
+        return { audio: this.deviceId ? { deviceId: { exact: this.deviceId } } : true };
+    }
+
+    emitRecordError(err) {
+        const name = err && err.name;
+        const reason = (name === 'NotAllowedError' || name === 'SecurityError') ? 'denied'
+            : (name === 'NotFoundError' || name === 'OverconstrainedError') ? 'notfound'
+                : 'unknown';
+        this.emit('record:error', { reason });
     }
 
     async start() {
@@ -40,14 +63,22 @@ class AudioRecorder {
 
         try {
             // Ask for the microphone only now, never on page load
-            this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            this.stream = await navigator.mediaDevices.getUserMedia(this.audioConstraints());
         } catch (err) {
-            const name = err && err.name;
-            const reason = (name === 'NotAllowedError' || name === 'SecurityError') ? 'denied'
-                : (name === 'NotFoundError' || name === 'OverconstrainedError') ? 'notfound'
-                    : 'unknown';
-            this.emit('record:error', { reason });
-            return;
+            if (err && err.name === 'OverconstrainedError' && this.deviceId) {
+                // The chosen device is gone; fall back to the system default
+                this.deviceId = null;
+                try {
+                    this.stream = await navigator.mediaDevices.getUserMedia(this.audioConstraints());
+                } catch (retryErr) {
+                    this.emitRecordError(retryErr);
+                    return;
+                }
+                this.emit('record:devicefallback');
+            } else {
+                this.emitRecordError(err);
+                return;
+            }
         }
 
         this.audioContext = new AudioContext();
@@ -67,7 +98,10 @@ class AudioRecorder {
         // Only announce the recording once the recorder is really capturing: the first
         // 100-300 ms after start() are lost otherwise, and users start talking on the click.
         this.mediaRecorder.onstart = () => {
-            requestAnimationFrame(() => this.checkSilence());
+            if (this.silenceDetection) {
+                requestAnimationFrame(() => this.checkSilence());
+            }
+            // The cap applies even without auto-stop, so a forgotten recording ends
             this.maxTimer = setTimeout(() => this.stop(), this.maxDuration);
             this.emit('record:start');
         };

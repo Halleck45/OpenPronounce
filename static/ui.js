@@ -30,6 +30,8 @@
     const PHONE_WRONG_THRESHOLD = 0.5;
     const COLORS = { you: '#ea580c', reference: '#2f6fb3', good: '#10b981', mid: '#f59e0b', bad: '#ef4444' };
     const LANG_STORAGE_KEY = 'openpronounce.lang';
+    const MIC_STORAGE_KEY = 'openpronounce.micId';
+    const AUTO_STOP_STORAGE_KEY = 'openpronounce.autoStop';
 
     const RECORD_ERRORS = {
         insecure: 'Recording needs a secure page (https or localhost). You can still upload a file.',
@@ -46,6 +48,8 @@
 
     const state = {
         lang: 'en',
+        micId: null,
+        autoStop: true,
         blob: null,
         filename: null,
         result: null,
@@ -76,9 +80,12 @@
         $('expected-text').addEventListener('input', hideTextHint);
 
         $('record-btn').addEventListener('click', onRecordClick);
+        setupMicSelector();
+        setupAutoStopToggle();
         document.addEventListener('record:start', onRecordStart);
         document.addEventListener('record:stop', onRecordStop);
         document.addEventListener('record:silence', () => silenceSound.play().catch(() => { }));
+        document.addEventListener('record:devicefallback', onMicFallback);
         document.addEventListener('record:ready', (e) => {
             setAudio(e.detail.blob, 'recording.webm', false);
             analyze();
@@ -214,6 +221,7 @@
             return;
         }
         hideRecordError();
+        recorder.setDeviceId(state.micId);
         recorder.start();
     }
 
@@ -223,10 +231,14 @@
         btn.setAttribute('aria-label', 'Stop recording');
         $('mic-icon').classList.add('hidden');
         $('stop-icon').classList.remove('hidden');
-        $('record-hint').textContent = 'Listening. Tap to stop, or pause for two seconds.';
+        $('record-hint').textContent = state.autoStop
+            ? 'Listening. Tap to stop, or pause for two seconds.'
+            : 'Listening. Tap to stop when you are done.';
         $('record-timer').classList.remove('hidden');
         $('audio-review').classList.add('hidden');
+        $('mic-select-btn').disabled = true;
         setView('idle');
+        updateMicLabel();
 
         const startedAt = Date.now();
         timerInterval = setInterval(() => {
@@ -246,6 +258,7 @@
         $('record-hint').textContent = 'Tap to record, then say the sentence';
         $('record-timer').classList.add('hidden');
         $('record-timer').textContent = '00:00';
+        $('mic-select-btn').disabled = false;
         clearInterval(timerInterval);
         timerInterval = null;
     }
@@ -258,6 +271,180 @@
 
     function hideRecordError() {
         $('record-error').classList.add('hidden');
+    }
+
+    // ---------------------------------------------------------------- microphone selector
+
+    function setupMicSelector() {
+        const btn = $('mic-select-btn');
+        if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+            btn.classList.add('hidden');
+            return;
+        }
+        state.micId = localStorage.getItem(MIC_STORAGE_KEY) || null;
+
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const menu = $('mic-select-menu');
+            if (menu.classList.contains('hidden')) {
+                openMicMenu();
+            } else {
+                hideMicMenu();
+            }
+        });
+        document.addEventListener('click', (e) => {
+            const menu = $('mic-select-menu');
+            if (!menu.classList.contains('hidden')
+                && !menu.contains(e.target)
+                && !btn.contains(e.target)) {
+                hideMicMenu();
+            }
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                hideMicMenu();
+            }
+        });
+        if (typeof navigator.mediaDevices.addEventListener === 'function') {
+            navigator.mediaDevices.addEventListener('devicechange', () => {
+                if (!$('mic-select-menu').classList.contains('hidden')) {
+                    renderMicMenu();
+                }
+                updateMicLabel();
+            });
+        }
+        updateMicLabel();
+    }
+
+    async function openMicMenu() {
+        const menu = $('mic-select-menu');
+        menu.classList.remove('hidden');
+        $('mic-select-btn').setAttribute('aria-expanded', 'true');
+        await renderMicMenu();
+    }
+
+    function hideMicMenu() {
+        $('mic-select-menu').classList.add('hidden');
+        $('mic-select-btn').setAttribute('aria-expanded', 'false');
+    }
+
+    async function renderMicMenu() {
+        const menu = $('mic-select-menu');
+        const list = document.createElement('div');
+        list.className = 'flex flex-col gap-0.5';
+        menu.innerHTML = '';
+        menu.appendChild(list);
+
+        let devices = [];
+        try {
+            devices = await micInputs();
+        } catch (err) {
+            // enumerateDevices can fail if the page lost mediaDevices support meanwhile
+        }
+
+        if (!devices.length) {
+            const empty = document.createElement('p');
+            empty.className = 'px-3 py-2 text-sm text-neutral-500';
+            empty.textContent = 'No microphone found.';
+            list.appendChild(empty);
+            return;
+        }
+        devices.forEach((device, index) => list.appendChild(micMenuItem(device, index)));
+        updateMicLabel();
+    }
+
+    async function micInputs() {
+        let inputs = (await navigator.mediaDevices.enumerateDevices())
+            .filter(d => d.kind === 'audioinput');
+        // Labels are only exposed once permission was granted; ask briefly so the
+        // menu shows real device names instead of anonymous entries
+        if (inputs.length && !inputs.some(d => d.label) && navigator.mediaDevices.getUserMedia) {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                stream.getTracks().forEach(track => track.stop());
+            } catch (err) {
+                // Permission denied: keep the anonymous list, recording will report it anyway
+            }
+            inputs = (await navigator.mediaDevices.enumerateDevices())
+                .filter(d => d.kind === 'audioinput');
+        }
+        return inputs;
+    }
+
+    function micMenuItem(device, index) {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.setAttribute('role', 'option');
+        const selected = device.deviceId === state.micId
+            || (state.micId === null && device.deviceId === 'default');
+        item.className = 'w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-sm text-left '
+            + (selected ? 'bg-accent-50 text-accent-700 font-medium' : 'text-neutral-700 hover:bg-neutral-50');
+        const name = device.label
+            || (device.deviceId === 'default' ? 'System default microphone' : `Microphone ${index + 1}`);
+        const label = document.createElement('span');
+        label.textContent = name;
+        label.className = 'truncate';
+        item.title = name;
+        item.appendChild(label);
+        if (selected) {
+            const check = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            check.setAttribute('viewBox', '0 0 24 24');
+            check.setAttribute('fill', 'none');
+            check.setAttribute('stroke', 'currentColor');
+            check.setAttribute('stroke-width', '2.5');
+            check.setAttribute('class', 'w-4 h-4 shrink-0');
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('stroke-linecap', 'round');
+            path.setAttribute('stroke-linejoin', 'round');
+            path.setAttribute('d', 'm4.5 12.75 6 6 9-13.5');
+            check.appendChild(path);
+            item.appendChild(check);
+        }
+        item.addEventListener('click', (e) => {
+            e.stopPropagation();
+            // "default" is kept as a null deviceId so the OS default is used
+            state.micId = device.deviceId === 'default' ? null : device.deviceId;
+            localStorage.setItem(MIC_STORAGE_KEY, state.micId || '');
+            hideMicMenu();
+        });
+        return item;
+    }
+
+    function onMicFallback() {
+        // The stored device is gone: forget it so the next recording asks for the default directly
+        state.micId = null;
+        localStorage.removeItem(MIC_STORAGE_KEY);
+        updateMicLabel();
+    }
+
+    function updateMicLabel() {
+        const el = $('mic-name');
+        if (!el || !navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+            return;
+        }
+        navigator.mediaDevices.enumerateDevices().then(devices => {
+            const inputs = devices.filter(d => d.kind === 'audioinput');
+            const current = state.micId
+                ? inputs.find(d => d.deviceId === state.micId)
+                : inputs.find(d => d.deviceId === 'default');
+            el.textContent = current && current.label ? `Microphone: ${current.label}` : '';
+        }).catch(() => { });
+    }
+
+    // ---------------------------------------------------------------- auto-stop toggle
+
+    function setupAutoStopToggle() {
+        const toggle = $('auto-stop-toggle');
+        const saved = localStorage.getItem(AUTO_STOP_STORAGE_KEY);
+        state.autoStop = saved === null ? true : saved === '1';
+        toggle.checked = state.autoStop;
+        recorder.setSilenceDetection(state.autoStop);
+
+        toggle.addEventListener('change', (e) => {
+            state.autoStop = e.target.checked;
+            localStorage.setItem(AUTO_STOP_STORAGE_KEY, state.autoStop ? '1' : '0');
+            recorder.setSilenceDetection(state.autoStop);
+        });
     }
 
     // ---------------------------------------------------------------- audio input (recorded or uploaded)
